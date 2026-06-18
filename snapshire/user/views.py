@@ -10,8 +10,54 @@ def home(request):
     if not request.user.is_authenticated:
         return redirect('login')
 
-    profile = UserProfile.objects.filter(user=request.user).first()
-    return render(request, 'user-home.html', {'profile': profile})
+    return render(request, 'user-home.html')
+
+
+def edit_profile(request):
+    if not request.user.is_authenticated:
+        return redirect('login')
+
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+
+    if request.method == 'POST':
+        user = request.user
+        username = request.POST.get('username', '').strip()
+        email = request.POST.get('email', '').strip()
+        phone = request.POST.get('phone', '').strip()
+        bio = request.POST.get('bio', '').strip()
+
+        errors = []
+
+        if not username:
+            errors.append('Username is required.')
+        elif len(username) < 3:
+            errors.append('Username must be at least 3 characters.')
+        elif User.objects.filter(username=username).exclude(pk=user.pk).exists():
+            errors.append('This username is already taken.')
+
+        if not email:
+            errors.append('Email is required.')
+        elif User.objects.filter(email=email).exclude(pk=user.pk).exists():
+            errors.append('This email is already registered.')
+
+        if phone and len(phone) < 10:
+            errors.append('Phone number must be at least 10 digits.')
+
+        if errors:
+            for error in errors:
+                messages.error(request, error)
+        else:
+            user.username = username
+            user.email = email
+            user.save()
+            profile.phone = phone
+            profile.bio = bio
+            profile.save()
+            messages.success(request, 'Profile updated successfully.')
+
+        return redirect('edit_profile')
+
+    return render(request, 'user-editprofile.html', {'profile': profile})
 
 
 def user_logout(request):
