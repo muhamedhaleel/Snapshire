@@ -3,6 +3,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.shortcuts import redirect, render
 
+
 from .models import UserProfile
 
 
@@ -152,3 +153,8 @@ def signup(request):
             return redirect('login')
 
     return render(request, 'user-signup.html')
+
+
+
+def index(request):
+    return redirect('login')
