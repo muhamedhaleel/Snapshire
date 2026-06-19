@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snaphire Signup</title>
+    <title>Snaphire Photographer Signup</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -17,7 +17,7 @@
     <div class="w-full max-w-sm bg-[#0b1f16] p-6 rounded-xl shadow-lg border border-green-700">
 
         <h2 class="text-xl font-semibold text-center text-green-400 mb-5">
-            Snaphire Signup
+            Photographer Signup
         </h2>
 
         {% if messages %}
@@ -100,7 +100,7 @@
 
         <p class="text-center text-gray-400 mt-4 text-sm">
             Already have an account?
-            <a href="{% url 'login' %}" class="text-green-400 hover:text-green-300">Login</a>
+            <a href="{% url 'photographer_login' %}" class="text-green-400 hover:text-green-300">Login</a>
         </p>
 
     </div>
