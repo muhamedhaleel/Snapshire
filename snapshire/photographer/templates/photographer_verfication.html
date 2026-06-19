@@ -149,7 +149,7 @@
 
                         <!-- Gold -->
                         <div class="rounded-xl border border-gray-200 p-5 flex flex-col relative">
-                            <span class="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">Demo</span>
+                            {% comment %} <span class="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">Demo</span> {% endcomment %}
                             <p class="text-xs font-semibold text-yellow-600 uppercase mb-2">Gold</p>
                             <p class="text-2xl font-bold text-gray-900 mb-1">$300</p>
                             <p class="text-xs text-gray-500 mb-4">Top searches</p>
@@ -162,14 +162,14 @@
                                 {% csrf_token %}
                                 <input type="hidden" name="plan" value="gold">
                                 <button type="submit" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-medium py-2.5 rounded-lg transition">
-                                    Select Gold (Demo)
+                                    Select Gold 
                                 </button>
                             </form>
                         </div>
 
                         <!-- Platinum -->
                         <div class="rounded-xl border border-gray-200 p-5 flex flex-col relative">
-                            <span class="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">Demo</span>
+                           
                             <p class="text-xs font-semibold text-purple-600 uppercase mb-2">Platinum</p>
                             <p class="text-2xl font-bold text-gray-900 mb-1">$500</p>
                             <p class="text-xs text-gray-500 mb-4">Top searches + premium clients</p>
@@ -183,14 +183,14 @@
                                 {% csrf_token %}
                                 <input type="hidden" name="plan" value="platinum">
                                 <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium py-2.5 rounded-lg transition">
-                                    Select Platinum (Demo)
+                                    Select Platinum 
                                 </button>
                             </form>
                         </div>
 
                     </div>
 
-                    <p class="text-xs text-gray-400 mt-5">Gold and Platinum plans are in demo mode. Payment processing will be available in a future update.</p>
+                    <p class="text-xs text-gray-400 mt-5">Gold and Platinum  Payment processing Soon </p>
                 {% endif %}
             </div>
 
