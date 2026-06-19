@@ -92,7 +92,11 @@ def user_login(request):
         if not errors:
             user = authenticate(request, username=username, password=password)
             if user is None:
-                errors.append('Invalid username or password.')
+                inactive_user = User.objects.filter(username=username).first()
+                if inactive_user and not inactive_user.is_active:
+                    errors.append('This account has been blocked. Contact support.')
+                else:
+                    errors.append('Invalid username or password.')
 
         if errors:
             for error in errors:
