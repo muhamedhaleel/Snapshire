@@ -154,7 +154,8 @@ def admin_user_list(request):
         users= users.filter(
             user__username__icontains=search
         )
-
+        
+    users = users.order_by('-created_at')
     return render(request, 'admin-userlist.html', {
         'users': users,
     })
