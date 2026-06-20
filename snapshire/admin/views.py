@@ -147,8 +147,13 @@ def admin_user_list(request):
     redirect_response = _require_superuser(request)
     if redirect_response:
         return redirect_response
+    search = request.GET.get('search')
 
     users = UserProfile.objects.select_related('user').order_by('-created_at')
+    if search:
+        users= users.filter(
+            user__username__icontains=search
+        )
 
     return render(request, 'admin-userlist.html', {
         'users': users,
@@ -159,9 +164,17 @@ def admin_photographer_list(request):
     redirect_response = _require_superuser(request)
     if redirect_response:
         return redirect_response
+    search = request.GET.get('search')
+
 
     photographers = PhotographerProfile.objects.select_related('user').order_by('-created_at')
+    
+    if search:
+        photographers = photographers.filter(
+            user__username__icontains=search
+        )
 
+    photographers = photographers.order_by('-created_at')
     return render(request, 'admin-photographerlist.html', {
         'photographers': photographers,
     })
