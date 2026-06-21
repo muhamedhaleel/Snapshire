@@ -12,8 +12,8 @@ from .models import PhotographerProfile, PortfolioFile, PortfolioLink
 
 MAX_PROFILE_IMAGE_SIZE = 5 * 1024 * 1024
 ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
-MAX_PORTFOLIO_LINKS = 5
-MAX_PORTFOLIO_FILES = 3
+MAX_PORTFOLIO_LINKS = 1
+MAX_PORTFOLIO_FILES = 1
 MAX_PORTFOLIO_FILE_SIZE = 10 * 1024 * 1024
 
 
@@ -38,68 +38,50 @@ def _normalize_portfolio_url(url):
     return url
 
 
-def _parse_portfolio_links(raw_links):
-    errors = []
-    cleaned_links = []
-    seen = set()
+def _parse_portfolio_link(raw_url, remove_link=False):
+    if remove_link:
+        return None, []
 
-    for index, raw_url in enumerate(raw_links, start=1):
-        url = raw_url.strip()
-        if not url:
-            continue
+    url = raw_url.strip()
+    if not url:
+        return None, []
 
-        if len(cleaned_links) >= MAX_PORTFOLIO_LINKS:
-            errors.append(f'You can add up to {MAX_PORTFOLIO_LINKS} portfolio links.')
-            break
-
-        try:
-            normalized_url = _normalize_portfolio_url(url)
-        except ValidationError:
-            errors.append(f'Portfolio link {index} must be a valid URL (http or https).')
-            continue
-
-        if normalized_url in seen:
-            continue
-
-        seen.add(normalized_url)
-        cleaned_links.append(normalized_url)
-
-    return cleaned_links, errors
+    try:
+        return _normalize_portfolio_url(url), []
+    except ValidationError:
+        return None, ['Portfolio link must be a valid URL (http or https).']
 
 
 def _validate_portfolio_pdf(pdf_file):
     errors = []
     extension = os.path.splitext(pdf_file.name)[1].lower()
     if extension != '.pdf':
-        errors.append(f'"{pdf_file.name}" must be a PDF file.')
+        errors.append('Portfolio file must be a PDF.')
     if pdf_file.size > MAX_PORTFOLIO_FILE_SIZE:
-        errors.append(f'"{pdf_file.name}" must be 10 MB or smaller.')
+        errors.append('Portfolio PDF must be 10 MB or smaller.')
     return errors
 
 
-def _parse_portfolio_files(profile, remove_file_ids, uploaded_files):
+def _parse_portfolio_file(profile, uploaded_file, remove_file=False):
     errors = []
-    valid_remove_ids = []
+    existing_file = profile.portfolio_files.first()
+    file_to_remove = None
+    cleaned_file = None
 
-    for file_id in remove_file_ids:
-        if str(file_id).isdigit():
-            valid_remove_ids.append(int(file_id))
+    if uploaded_file:
+        errors.extend(_validate_portfolio_pdf(uploaded_file))
+        if not errors:
+            cleaned_file = uploaded_file
+            if existing_file:
+                file_to_remove = existing_file
+        return file_to_remove, cleaned_file, errors
 
-    files_to_remove = profile.portfolio_files.filter(id__in=valid_remove_ids)
-    remaining_count = profile.portfolio_files.exclude(id__in=valid_remove_ids).count()
+    if remove_file and existing_file:
+        file_to_remove = existing_file
+    elif profile.portfolio_files.count() > MAX_PORTFOLIO_FILES:
+        errors.append('Only one portfolio PDF is allowed. Remove the existing file first.')
 
-    if remaining_count + len(uploaded_files) > MAX_PORTFOLIO_FILES:
-        errors.append(f'You can upload up to {MAX_PORTFOLIO_FILES} portfolio PDF files.')
-
-    cleaned_files = []
-    for pdf_file in uploaded_files:
-        file_errors = _validate_portfolio_pdf(pdf_file)
-        if file_errors:
-            errors.extend(file_errors)
-        else:
-            cleaned_files.append(pdf_file)
-
-    return files_to_remove, cleaned_files, errors
+    return file_to_remove, cleaned_file, errors
 
 
 def _require_photographer(request):
@@ -191,9 +173,10 @@ def photographer_edit_profile(request):
         specialty = request.POST.get('specialty', '').strip()
         location = request.POST.get('location', '').strip()
         remove_profile_image = request.POST.get('remove_profile_image') == '1'
-        portfolio_links = request.POST.getlist('portfolio_links')
-        remove_portfolio_files = request.POST.getlist('remove_portfolio_files')
-        portfolio_pdfs = request.FILES.getlist('portfolio_pdfs')
+        portfolio_link = request.POST.get('portfolio_link', '').strip()
+        remove_portfolio_link = request.POST.get('remove_portfolio_link') == '1'
+        remove_portfolio_file = request.POST.get('remove_portfolio_file') == '1'
+        portfolio_pdf = request.FILES.get('portfolio_pdf')
 
         errors = []
 
@@ -212,13 +195,19 @@ def photographer_edit_profile(request):
         if phone and len(phone) < 10:
             errors.append('Phone number must be at least 10 digits.')
 
-        cleaned_portfolio_links, portfolio_errors = _parse_portfolio_links(portfolio_links)
-        errors.extend(portfolio_errors)
+        cleaned_portfolio_link, portfolio_link_errors = _parse_portfolio_link(
+            portfolio_link,
+            remove_portfolio_link,
+        )
+        errors.extend(portfolio_link_errors)
 
-        files_to_remove, cleaned_portfolio_files, portfolio_file_errors = _parse_portfolio_files(
+        if profile.portfolio_links.count() > MAX_PORTFOLIO_LINKS:
+            errors.append('Only one portfolio link is allowed.')
+
+        file_to_remove, cleaned_portfolio_file, portfolio_file_errors = _parse_portfolio_file(
             profile,
-            remove_portfolio_files,
-            portfolio_pdfs,
+            portfolio_pdf,
+            remove_portfolio_file,
         )
         errors.extend(portfolio_file_errors)
 
@@ -249,29 +238,35 @@ def photographer_edit_profile(request):
             profile.save()
 
             profile.portfolio_links.all().delete()
-            for url in cleaned_portfolio_links:
-                PortfolioLink.objects.create(profile=profile, url=url)
+            if cleaned_portfolio_link:
+                PortfolioLink.objects.create(profile=profile, url=cleaned_portfolio_link)
 
-            for portfolio_file in files_to_remove:
-                portfolio_file.delete()
+            if file_to_remove:
+                file_to_remove.delete()
+            if cleaned_portfolio_file:
+                PortfolioFile.objects.create(
+                    profile=profile,
+                    file=cleaned_portfolio_file,
+                    original_name=cleaned_portfolio_file.name,
+                )
 
-            for pdf_file in cleaned_portfolio_files:
-                PortfolioFile.objects.create(profile=profile, file=pdf_file, original_name=pdf_file.name)
+            for extra_link in profile.portfolio_links.all()[MAX_PORTFOLIO_LINKS:]:
+                extra_link.delete()
+            for extra_file in profile.portfolio_files.all()[MAX_PORTFOLIO_FILES:]:
+                extra_file.delete()
 
             messages.success(request, 'Profile updated successfully.')
 
         return redirect('photographer_edit_profile')
 
-    portfolio_links = list(profile.portfolio_links.all())
-    portfolio_files = list(profile.portfolio_files.all())
+    portfolio_link = profile.portfolio_links.first()
+    portfolio_file = profile.portfolio_files.first()
     verification_status, completed_steps, total_steps = _profile_verification_status(profile)
 
     return render(request, 'photographer-editprofile.html', {
         'profile': profile,
-        'portfolio_links': portfolio_links,
-        'portfolio_files': portfolio_files,
-        'max_portfolio_links': MAX_PORTFOLIO_LINKS,
-        'max_portfolio_files': MAX_PORTFOLIO_FILES,
+        'portfolio_link': portfolio_link,
+        'portfolio_file': portfolio_file,
         'verification_status': verification_status,
         'verification_completed': completed_steps,
         'verification_total': total_steps,
