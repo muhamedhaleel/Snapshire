@@ -149,16 +149,24 @@ def admin_user_list(request):
         return redirect_response
     search = request.GET.get('search')
 
-    users = UserProfile.objects.select_related('user').order_by('-created_at')
+    users = UserProfile.objects.select_related('user')
     if search:
         users= users.filter(
             user__username__icontains=search
         )
         
     users = users.order_by('-created_at')
+    paginator = Paginator(users, 1)
+
+    page_number = request.GET.get('page')
+    print("Current Page:", page_number)
+
+    page_obj = paginator.get_page(page_number)
     
     return render(request, 'admin-userlist.html', {
-        'users': users,
+        'users': page_obj,
+        'page_obj': page_obj,
+        'search': search,
     })
 
 
