@@ -2,6 +2,11 @@ from django.contrib.auth.models import User
 from django.db import models
 
 
+def photographer_profile_image_path(instance, filename):
+    extension = filename.rsplit('.', 1)[-1].lower()
+    return f'photographer_profiles/{instance.user_id}/profile.{extension}'
+
+
 class PhotographerProfile(models.Model):
     PLAN_FREE = 'free'
     PLAN_GOLD = 'gold'
@@ -23,6 +28,7 @@ class PhotographerProfile(models.Model):
     bio = models.TextField(blank=True, default='')
     specialty = models.CharField(max_length=100, blank=True, default='')
     location = models.CharField(max_length=150, blank=True, default='')
+    profile_image = models.ImageField(upload_to=photographer_profile_image_path, blank=True, null=True)
     plan_mode = models.CharField(max_length=20, choices=PLAN_CHOICES, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -47,3 +53,19 @@ class PhotographerProfile(models.Model):
         if not self.plan_mode:
             return 'No plan selected'
         return self.get_plan_mode_display()
+
+
+class PortfolioLink(models.Model):
+    profile = models.ForeignKey(
+        PhotographerProfile,
+        on_delete=models.CASCADE,
+        related_name='portfolio_links',
+    )
+    url = models.URLField(max_length=500)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return self.url
