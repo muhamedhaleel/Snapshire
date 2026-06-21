@@ -7,12 +7,14 @@ from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from django.shortcuts import redirect, render
 
-from .models import PhotographerProfile, PortfolioLink
+from .models import PhotographerProfile, PortfolioFile, PortfolioLink
 
 
 MAX_PROFILE_IMAGE_SIZE = 5 * 1024 * 1024
 ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
 MAX_PORTFOLIO_LINKS = 5
+MAX_PORTFOLIO_FILES = 3
+MAX_PORTFOLIO_FILE_SIZE = 10 * 1024 * 1024
 
 
 def _validate_profile_image(image_file):
@@ -63,6 +65,41 @@ def _parse_portfolio_links(raw_links):
         cleaned_links.append(normalized_url)
 
     return cleaned_links, errors
+
+
+def _validate_portfolio_pdf(pdf_file):
+    errors = []
+    extension = os.path.splitext(pdf_file.name)[1].lower()
+    if extension != '.pdf':
+        errors.append(f'"{pdf_file.name}" must be a PDF file.')
+    if pdf_file.size > MAX_PORTFOLIO_FILE_SIZE:
+        errors.append(f'"{pdf_file.name}" must be 10 MB or smaller.')
+    return errors
+
+
+def _parse_portfolio_files(profile, remove_file_ids, uploaded_files):
+    errors = []
+    valid_remove_ids = []
+
+    for file_id in remove_file_ids:
+        if str(file_id).isdigit():
+            valid_remove_ids.append(int(file_id))
+
+    files_to_remove = profile.portfolio_files.filter(id__in=valid_remove_ids)
+    remaining_count = profile.portfolio_files.exclude(id__in=valid_remove_ids).count()
+
+    if remaining_count + len(uploaded_files) > MAX_PORTFOLIO_FILES:
+        errors.append(f'You can upload up to {MAX_PORTFOLIO_FILES} portfolio PDF files.')
+
+    cleaned_files = []
+    for pdf_file in uploaded_files:
+        file_errors = _validate_portfolio_pdf(pdf_file)
+        if file_errors:
+            errors.extend(file_errors)
+        else:
+            cleaned_files.append(pdf_file)
+
+    return files_to_remove, cleaned_files, errors
 
 
 def _require_photographer(request):
@@ -155,6 +192,8 @@ def photographer_edit_profile(request):
         location = request.POST.get('location', '').strip()
         remove_profile_image = request.POST.get('remove_profile_image') == '1'
         portfolio_links = request.POST.getlist('portfolio_links')
+        remove_portfolio_files = request.POST.getlist('remove_portfolio_files')
+        portfolio_pdfs = request.FILES.getlist('portfolio_pdfs')
 
         errors = []
 
@@ -175,6 +214,13 @@ def photographer_edit_profile(request):
 
         cleaned_portfolio_links, portfolio_errors = _parse_portfolio_links(portfolio_links)
         errors.extend(portfolio_errors)
+
+        files_to_remove, cleaned_portfolio_files, portfolio_file_errors = _parse_portfolio_files(
+            profile,
+            remove_portfolio_files,
+            portfolio_pdfs,
+        )
+        errors.extend(portfolio_file_errors)
 
         profile_image = request.FILES.get('profile_image')
         if profile_image:
@@ -206,17 +252,26 @@ def photographer_edit_profile(request):
             for url in cleaned_portfolio_links:
                 PortfolioLink.objects.create(profile=profile, url=url)
 
+            for portfolio_file in files_to_remove:
+                portfolio_file.delete()
+
+            for pdf_file in cleaned_portfolio_files:
+                PortfolioFile.objects.create(profile=profile, file=pdf_file, original_name=pdf_file.name)
+
             messages.success(request, 'Profile updated successfully.')
 
         return redirect('photographer_edit_profile')
 
     portfolio_links = list(profile.portfolio_links.all())
+    portfolio_files = list(profile.portfolio_files.all())
     verification_status, completed_steps, total_steps = _profile_verification_status(profile)
 
     return render(request, 'photographer-editprofile.html', {
         'profile': profile,
         'portfolio_links': portfolio_links,
+        'portfolio_files': portfolio_files,
         'max_portfolio_links': MAX_PORTFOLIO_LINKS,
+        'max_portfolio_files': MAX_PORTFOLIO_FILES,
         'verification_status': verification_status,
         'verification_completed': completed_steps,
         'verification_total': total_steps,
