@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.shortcuts import redirect, render
-
+from django.core.paginator import Paginator
 from photographer.models import PhotographerProfile
 from user.models import UserProfile
 
@@ -156,6 +156,7 @@ def admin_user_list(request):
         )
         
     users = users.order_by('-created_at')
+    
     return render(request, 'admin-userlist.html', {
         'users': users,
     })
@@ -165,10 +166,10 @@ def admin_photographer_list(request):
     redirect_response = _require_superuser(request)
     if redirect_response:
         return redirect_response
-    search = request.GET.get('search')
+    search = request.GET.get('search', '')
 
 
-    photographers = PhotographerProfile.objects.select_related('user').order_by('-created_at')
+    photographers = PhotographerProfile.objects.select_related('user')
     
     if search:
         photographers = photographers.filter(
@@ -176,6 +177,16 @@ def admin_photographer_list(request):
         )
 
     photographers = photographers.order_by('-created_at')
+    # Pagination (5 records per page)
+    paginator = Paginator(photographers, 2)
+
+    page_number = request.GET.get('page')
+
+    page_obj = paginator.get_page(page_number)
+
     return render(request, 'admin-photographerlist.html', {
-        'photographers': photographers,
+        'photographers': page_obj,
+        'page_obj': page_obj,
+        'search': search,
     })
+    
