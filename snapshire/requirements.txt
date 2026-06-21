@@ -1,6 +1,7 @@
 asgiref==3.11.1
 Django==6.0.6
 django-environ==0.13.0
+Pillow==11.2.1
 python-dotenv==1.2.2
 sqlparse==0.5.5
 tzdata==2026.2
