@@ -120,6 +120,45 @@
                         </tbody>
                     </table>
                 </div>
+                <div class="flex justify-center items-center gap-2 mt-6">
+
+    <!-- Previous Button -->
+    {% if page_obj.has_previous %}
+        <a href="?search={{ search }}&page={{ page_obj.previous_page_number }}"
+           class="px-3 py-2 bg-gray-200 rounded-lg hover:bg-gray-300">
+            Previous
+        </a>
+    {% endif %}
+
+    <!-- Page Numbers -->
+    {% for num in page_obj.paginator.page_range %}
+
+        {% if page_obj.number == num %}
+
+            <span class="px-4 py-2 bg-green-600 text-white rounded-lg">
+                {{ num }}
+            </span>
+
+        {% else %}
+
+            <a href="?search={{ search }}&page={{ num }}"
+               class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300">
+                {{ num }}
+            </a>
+
+        {% endif %}
+
+    {% endfor %}
+
+    <!-- Next Button -->
+    {% if page_obj.has_next %}
+        <a href="?search={{ search }}&page={{ page_obj.next_page_number }}"
+           class="px-3 py-2 bg-gray-200 rounded-lg hover:bg-gray-300">
+            Next
+        </a>
+    {% endif %}
+
+</div>
             </div>
         </main>
     </div>
