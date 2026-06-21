@@ -1,9 +1,68 @@
+import os
+
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
 from django.shortcuts import redirect, render
 
-from .models import PhotographerProfile
+from .models import PhotographerProfile, PortfolioLink
+
+
+MAX_PROFILE_IMAGE_SIZE = 5 * 1024 * 1024
+ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
+MAX_PORTFOLIO_LINKS = 5
+
+
+def _validate_profile_image(image_file):
+    errors = []
+    extension = os.path.splitext(image_file.name)[1].lower()
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        errors.append('Profile image must be JPG, PNG, or WEBP.')
+    if image_file.size > MAX_PROFILE_IMAGE_SIZE:
+        errors.append('Profile image must be 5 MB or smaller.')
+    return errors
+
+
+def _normalize_portfolio_url(url):
+    url = url.strip()
+    if not url:
+        return None
+    if not url.startswith(('http://', 'https://')):
+        url = f'https://{url}'
+    validator = URLValidator()
+    validator(url)
+    return url
+
+
+def _parse_portfolio_links(raw_links):
+    errors = []
+    cleaned_links = []
+    seen = set()
+
+    for index, raw_url in enumerate(raw_links, start=1):
+        url = raw_url.strip()
+        if not url:
+            continue
+
+        if len(cleaned_links) >= MAX_PORTFOLIO_LINKS:
+            errors.append(f'You can add up to {MAX_PORTFOLIO_LINKS} portfolio links.')
+            break
+
+        try:
+            normalized_url = _normalize_portfolio_url(url)
+        except ValidationError:
+            errors.append(f'Portfolio link {index} must be a valid URL (http or https).')
+            continue
+
+        if normalized_url in seen:
+            continue
+
+        seen.add(normalized_url)
+        cleaned_links.append(normalized_url)
+
+    return cleaned_links, errors
 
 
 def _require_photographer(request):
@@ -94,6 +153,8 @@ def photographer_edit_profile(request):
         bio = request.POST.get('bio', '').strip()
         specialty = request.POST.get('specialty', '').strip()
         location = request.POST.get('location', '').strip()
+        remove_profile_image = request.POST.get('remove_profile_image') == '1'
+        portfolio_links = request.POST.getlist('portfolio_links')
 
         errors = []
 
@@ -112,6 +173,13 @@ def photographer_edit_profile(request):
         if phone and len(phone) < 10:
             errors.append('Phone number must be at least 10 digits.')
 
+        cleaned_portfolio_links, portfolio_errors = _parse_portfolio_links(portfolio_links)
+        errors.extend(portfolio_errors)
+
+        profile_image = request.FILES.get('profile_image')
+        if profile_image:
+            errors.extend(_validate_profile_image(profile_image))
+
         if errors:
             for error in errors:
                 messages.error(request, error)
@@ -123,15 +191,32 @@ def photographer_edit_profile(request):
             profile.bio = bio
             profile.specialty = specialty
             profile.location = location
+
+            if remove_profile_image and profile.profile_image:
+                profile.profile_image.delete(save=False)
+                profile.profile_image = None
+            elif profile_image:
+                if profile.profile_image:
+                    profile.profile_image.delete(save=False)
+                profile.profile_image = profile_image
+
             profile.save()
+
+            profile.portfolio_links.all().delete()
+            for url in cleaned_portfolio_links:
+                PortfolioLink.objects.create(profile=profile, url=url)
+
             messages.success(request, 'Profile updated successfully.')
 
         return redirect('photographer_edit_profile')
 
+    portfolio_links = list(profile.portfolio_links.all())
     verification_status, completed_steps, total_steps = _profile_verification_status(profile)
 
     return render(request, 'photographer-editprofile.html', {
         'profile': profile,
+        'portfolio_links': portfolio_links,
+        'max_portfolio_links': MAX_PORTFOLIO_LINKS,
         'verification_status': verification_status,
         'verification_completed': completed_steps,
         'verification_total': total_steps,
