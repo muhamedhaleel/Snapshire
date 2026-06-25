@@ -60,7 +60,7 @@
                             <p class="text-sm font-medium text-white">{{ user.username }}</p>
                             <p class="text-xs text-gray-400 truncate">{{ user.email|default:"No email" }}</p>
                         </div>
-                        <a href="{% url 'edit_profile' %}" class="block px-4 py-2.5 text-sm text-gray-300 hover:bg-[#102a20] hover:text-green-400">Edit Profile</a>
+                        <a href="{% url 'edit_profile' %}" class="block px-4 py-2.5 text-sm text-gray-300 hover:bg-[#102a20] hover:text-green-400">My Profile</a>
                         <a href="#booking" class="block px-4 py-2.5 text-sm text-gray-300 hover:bg-[#102a20] hover:text-green-400">My Bookings</a>
                         <form method="POST" action="{% url 'logout' %}" class="border-t border-green-800">
                             {% csrf_token %}
@@ -258,7 +258,7 @@
                 <div>
                     <p class="text-sm font-medium text-green-400 mb-2">Account</p>
                     <ul class="space-y-1 text-xs text-gray-400">
-                        <li><a href="{% url 'edit_profile' %}" class="hover:text-green-400">Edit Profile</a></li>
+                        <li><a href="{% url 'edit_profile' %}" class="hover:text-green-400">My Profile</a></li>
                         <li><a href="#booking" class="hover:text-green-400">My Bookings</a></li>
                     </ul>
                 </div>
