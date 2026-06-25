@@ -213,8 +213,8 @@
                             <div>
                                 <label for="phone" class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                                 <input type="tel" id="phone" name="phone" value="{{ profile.phone }}"
-                                    placeholder="Enter phone number" minlength="10" maxlength="20" pattern="[0-9+\-\s]+"
-                                    title="10–20 digits" autocomplete="tel"
+                                    placeholder="Enter phone number" minlength="10" maxlength="10" pattern="[0-9]{10}"
+                                    title="Enter digits" autocomplete="tel"
                                     class="w-full px-3 py-2.5 text-sm rounded-lg bg-white text-gray-800 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500">
                             </div>
 
