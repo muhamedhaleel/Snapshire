@@ -48,8 +48,8 @@ def admin_login(request):
                 errors.append('Invalid username or password.')
             elif not user.is_superuser:
                 errors.append(
-                    'This account is not a superuser. Use credentials from '
-                    'createsuperuser — not a regular user or photographer account.'
+                    'This account is not a superuser id '
+                    
                 )
 
         if errors:
@@ -156,7 +156,7 @@ def admin_user_list(request):
         )
         
     users = users.order_by('-created_at')
-    paginator = Paginator(users, 1)
+    paginator = Paginator(users, 3)
 
     page_number = request.GET.get('page')
     print("Current Page:", page_number)
@@ -186,7 +186,7 @@ def admin_photographer_list(request):
 
     photographers = photographers.order_by('-created_at')
     # Pagination (5 records per page)
-    paginator = Paginator(photographers, 2)
+    paginator = Paginator(photographers, 3)
 
     page_number = request.GET.get('page')
 
