@@ -37,6 +37,8 @@ class PhotographerProfile(models.Model):
     portfolio_link = models.URLField(blank=True,default="")
     portfolio_pdf = models.FileField(upload_to="photographer_portfolios/",blank=True,null=True)
     plan_mode = models.CharField(max_length=20, choices=PLAN_CHOICES, blank=True, default='')
+    verification_status = models.CharField(max_length=20, default="Pending")
+    is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

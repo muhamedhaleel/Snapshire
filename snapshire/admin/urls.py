@@ -3,11 +3,46 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('', views.admin_home, name='admin_home'),
-    path('login/', views.admin_login, name='admin_login'),
-    path('logout/', views.admin_logout, name='admin_logout'),
-    path('users/', views.admin_user_list, name='admin_user_list'),
-    path('users/<int:user_id>/toggle-block/', views.admin_toggle_user_block, name='admin_toggle_user_block'),
-    path('photographers/', views.admin_photographer_list, name='admin_photographer_list'),
-    path('photographers/<int:user_id>/toggle-block/', views.admin_toggle_photographer_block, name='admin_toggle_photographer_block'),
+    path("login/",views.admin_login,name="admin_login"),
+     path(
+        "users/",
+        views.user_list,
+        name="user_list"
+    ),
+
+    path(
+        "users/<int:user_id>/block/",
+        views.block_user,
+        name="block_user"
+    ),
+
+    path(
+        "users/<int:user_id>/unblock/",
+        views.unblock_user,
+        name="unblock_user"
+    ),
+    path(
+        "photographers/",
+        views.photographer_list,
+        name="photographer_list"
+    ),
+
+    path(
+        "photographers/<int:photographer_id>/block/",
+        views.block_photographer,
+        name="block_photographer"
+    ),
+
+    path(
+        "photographers/<int:photographer_id>/unblock/",
+        views.unblock_photographer,
+        name="unblock_photographer"
+    ),
+
+    path(
+        "photographers/<int:photographer_id>/verify/",
+        views.verify_photographer,
+        name="verify_photographer"
+    ),
+
 ]

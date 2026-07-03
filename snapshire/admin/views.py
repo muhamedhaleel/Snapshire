@@ -1,200 +1,240 @@
-from django.contrib import messages
-from django.contrib.auth import authenticate, login, logout
+from rest_framework.decorators import api_view, parser_classes,permission_classes
+from rest_framework.parsers import FormParser
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
+from drf_yasg.utils import swagger_auto_schema
+from rest_framework.permissions import IsAdminUser
+from .serializers import UserListSerializer
+from .serializers import AdminLoginSerializer,PhotographerListSerializer
+from rest_framework import status
 from django.contrib.auth.models import User
-from django.shortcuts import redirect, render
-from django.core.paginator import Paginator
-from photographer.models import PhotographerProfile
-from user.models import UserProfile
 
 
-def _require_superuser(request):
-    if not request.user.is_authenticated:
-        return redirect('admin_login')
-
-    if not request.user.is_superuser:
-        messages.error(request, 'Access denied. Superuser account required.')
-        logout(request)
-        return redirect('admin_login')
-
-    return None
-
-
+@swagger_auto_schema(
+    method="post",
+    request_body=AdminLoginSerializer,
+    responses={200: "Admin Login Successful"}
+)
+@api_view(["POST"])
+@parser_classes([FormParser])
 def admin_login(request):
-    if request.user.is_authenticated:
-        if request.user.is_superuser:
-            return redirect('admin_home')
-        logout(request)
-        messages.info(request, 'Signed out of your previous account. Log in with your superuser credentials.')
 
-    username = ''
+    serializer = AdminLoginSerializer(data=request.data)
 
-    if request.method == 'POST':
-        username = request.POST.get('username', '').strip()
-        password = request.POST.get('password', '')
+    if serializer.is_valid():
 
-        errors = []
+        user = serializer.validated_data["user"]
 
-        if not username:
-            errors.append('Username is required.')
-        elif len(username) < 3:
-            errors.append('Username must be at least 3 characters.')
+        refresh = RefreshToken.for_user(user)
 
-        if not password:
-            errors.append('Password is required.')
+        return Response(
+            {
+                "message": "Admin Login Successful",
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "username": user.username,
+                "email": user.email,
+            },
+            status=status.HTTP_200_OK
+        )
 
-        if not errors:
-            user = authenticate(request, username=username, password=password)
-            if user is None:
-                errors.append('Invalid username or password.')
-            elif not user.is_superuser:
-                errors.append(
-                    'This account is not a superuser id '
-                    
-                )
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST
+    )
 
-        if errors:
-            for error in errors:
-                messages.error(request, error)
-        else:
-            login(request, user)
-            messages.success(request, f'Welcome, {user.username}!')
-            return redirect('admin_home')
+@swagger_auto_schema(
+    method="get",
+    responses={200: UserListSerializer(many=True)}
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def user_list(request):
 
-    return render(request, 'admin-login.html', {'username': username})
+    users = User.objects.filter(is_superuser=False)
 
+    serializer = UserListSerializer(
+        users,
+        many=True
+    )
 
-def admin_logout(request):
-    if request.method == 'POST':
-        logout(request)
-        messages.success(request, 'You have been logged out successfully.')
-    return redirect('admin_login')
+    return Response(serializer.data)
 
 
-def admin_home(request):
-    redirect_response = _require_superuser(request)
-    if redirect_response:
-        return redirect_response
-
-    user_count = UserProfile.objects.count()
-    photographer_count = PhotographerProfile.objects.count()
-    total_accounts = User.objects.filter(is_superuser=False).count()
-    blocked_users = UserProfile.objects.filter(user__is_active=False).count()
-    blocked_photographers = PhotographerProfile.objects.filter(user__is_active=False).count()
-
-    return render(request, 'admin-home.html', {
-        'user_count': user_count,
-        'photographer_count': photographer_count,
-        'total_accounts': total_accounts,
-        'blocked_users': blocked_users,
-        'blocked_photographers': blocked_photographers,
-    })
-
-
-def _toggle_account_block(request, user_id, profile_check, redirect_name, account_label):
-    redirect_response = _require_superuser(request)
-    if redirect_response:
-        return redirect_response
-
-    if request.method != 'POST':
-        return redirect(redirect_name)
+@swagger_auto_schema(
+    method="patch",
+    responses={200: "User Blocked Successfully"}
+)
+@api_view(["PATCH"])
+@permission_classes([IsAdminUser])
+def block_user(request, user_id):
 
     try:
-        target = User.objects.get(pk=user_id)
+        user = User.objects.get(
+            id=user_id,
+            is_superuser=False
+        )
+
     except User.DoesNotExist:
-        messages.error(request, f'{account_label} not found.')
-        return redirect(redirect_name)
 
-    if target.is_superuser:
-        messages.error(request, 'Cannot block a superuser account.')
-        return redirect(redirect_name)
-
-    if not profile_check(target):
-        messages.error(request, f'This account is not a registered {account_label.lower()}.')
-        return redirect(redirect_name)
-
-    target.is_active = not target.is_active
-    target.save()
-
-    if target.is_active:
-        messages.success(request, f'{target.username} has been unblocked.')
-    else:
-        messages.success(request, f'{target.username} has been blocked.')
-
-    return redirect(redirect_name)
-
-
-def admin_toggle_user_block(request, user_id):
-    return _toggle_account_block(
-        request,
-        user_id,
-        lambda user: UserProfile.objects.filter(user=user).exists(),
-        'admin_user_list',
-        'User',
-    )
-
-
-def admin_toggle_photographer_block(request, user_id):
-    return _toggle_account_block(
-        request,
-        user_id,
-        lambda user: PhotographerProfile.objects.filter(user=user).exists(),
-        'admin_photographer_list',
-        'Photographer',
-    )
-
-
-def admin_user_list(request):
-    redirect_response = _require_superuser(request)
-    if redirect_response:
-        return redirect_response
-    search = request.GET.get('search')
-
-    users = UserProfile.objects.select_related('user')
-    if search:
-        users= users.filter(
-            user__username__icontains=search
+        return Response(
+            {
+                "error": "User not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
         )
-        
-    users = users.order_by('-created_at')
-    paginator = Paginator(users, 3)
 
-    page_number = request.GET.get('page')
-    print("Current Page:", page_number)
+    user.is_active = False
+    user.save()
 
-    page_obj = paginator.get_page(page_number)
-    
-    return render(request, 'admin-userlist.html', {
-        'users': page_obj,
-        'page_obj': page_obj,
-        'search': search,
+    return Response(
+        {
+            "message": "User blocked successfully.",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "status": "Blocked"
+            }
+        },
+        status=status.HTTP_200_OK
+    )
+
+@swagger_auto_schema(
+    method="patch",
+    responses={200: "User Unblocked Successfully"}
+)
+@api_view(["PATCH"])
+@permission_classes([IsAdminUser])
+def unblock_user(request, user_id):
+
+    try:
+        user = User.objects.get(
+            id=user_id,
+            is_superuser=False
+        )
+
+    except User.DoesNotExist:
+
+        return Response(
+            {
+                "error": "User not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    user.is_active = True
+    user.save()
+
+    return Response(
+        {
+            "message": "User unblocked successfully.",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "status": "Active"
+            }
+        },
+        status=status.HTTP_200_OK
+    )
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: PhotographerListSerializer(many=True)}
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def photographer_list(request):
+
+    photographers = User.objects.filter(
+        photographer_profile__isnull=False,
+        is_superuser=False
+    )
+
+    serializer = PhotographerListSerializer(
+        photographers,
+        many=True
+    )
+
+    return Response(serializer.data)
+
+@swagger_auto_schema(method="patch")
+@api_view(["PATCH"])
+@permission_classes([IsAdminUser])
+def block_photographer(request, photographer_id):
+
+    try:
+        user = User.objects.get(
+            id=photographer_id,
+            photographer_profile__isnull=False
+        )
+
+    except User.DoesNotExist:
+
+        return Response(
+            {"error": "Photographer not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    user.is_active = False
+    user.save()
+
+    return Response({
+        "message": "Photographer blocked successfully."
     })
 
 
-def admin_photographer_list(request):
-    redirect_response = _require_superuser(request)
-    if redirect_response:
-        return redirect_response
-    search = request.GET.get('search', '')
+@swagger_auto_schema(method="patch")
+@api_view(["PATCH"])
+@permission_classes([IsAdminUser])
+def unblock_photographer(request, photographer_id):
 
-
-    photographers = PhotographerProfile.objects.select_related('user')
-    
-    if search:
-        photographers = photographers.filter(
-            user__username__icontains=search
+    try:
+        user = User.objects.get(
+            id=photographer_id,
+            photographer_profile__isnull=False
         )
 
-    photographers = photographers.order_by('-created_at')
-    # Pagination (5 records per page)
-    paginator = Paginator(photographers, 3)
+    except User.DoesNotExist:
 
-    page_number = request.GET.get('page')
+        return Response(
+            {"error": "Photographer not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
 
-    page_obj = paginator.get_page(page_number)
+    user.is_active = True
+    user.save()
 
-    return render(request, 'admin-photographerlist.html', {
-        'photographers': page_obj,
-        'page_obj': page_obj,
-        'search': search,
+    return Response({
+        "message": "Photographer unblocked successfully."
     })
-    
+
+@swagger_auto_schema(method="patch")
+@api_view(["PATCH"])
+@permission_classes([IsAdminUser])
+def verify_photographer(request, photographer_id):
+
+    try:
+        profile = User.objects.get(
+            id=photographer_id,
+            photographer_profile__isnull=False
+        ).photographer_profile
+
+    except User.DoesNotExist:
+
+        return Response(
+            {"error": "Photographer not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    profile.is_verified = True
+    profile.verification_status = "Approved"
+    profile.save()
+
+    return Response({
+        "message": "Photographer verified successfully.",
+        "verification_status": profile.verification_status,
+        "is_verified": profile.is_verified
+    })
