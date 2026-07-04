@@ -98,14 +98,9 @@ def login(request):
 def profile_update(request):
 
     serializer = UpdatePhotographerProfileSerializer(
-
-        request.user.photographer_profile,
-
-        data=request.data,
-
-        partial=True
-
-    )
+    request.user.photographer_profile,
+    data=request.data
+)
 
     if serializer.is_valid():
 
