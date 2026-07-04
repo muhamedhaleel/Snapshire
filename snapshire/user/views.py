@@ -64,7 +64,7 @@ def login(request):
 
 
 @swagger_auto_schema(
-    method='put',
+    method="put",
     request_body=UpdateProfileSerializer
 )
 @api_view(["PUT"])
@@ -72,24 +72,37 @@ def login(request):
 @parser_classes([FormParser])
 def profile_update(request):
 
+    profile, created = UserProfile.objects.get_or_create(
+        user=request.user
+    )
+
     serializer = UpdateProfileSerializer(
-        request.user.profile,
+        profile,
         data=request.data,
         partial=True
     )
 
     if serializer.is_valid():
         serializer.save()
-        return Response(serializer.data,status=200)
+        return Response(serializer.data)
 
     return Response(serializer.errors, status=400)
 
 
 
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: UpdateProfileSerializer}
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def profile(request):
 
-    serializer = UpdateProfileSerializer(request.user.profile)
+    profile, created = UserProfile.objects.get_or_create(
+        user=request.user
+    )
+
+    serializer = UpdateProfileSerializer(profile)
 
     return Response(serializer.data)

@@ -68,7 +68,6 @@ class SignupSerializer(serializers.ModelSerializer):
         return user
     
 class LoginSerializer(serializers.Serializer):
-
     username = serializers.CharField()
 
     password = serializers.CharField(
@@ -77,9 +76,33 @@ class LoginSerializer(serializers.Serializer):
 
     def validate(self, attrs):
 
+        username = attrs["username"]
+        password = attrs["password"]
+
+        # Check whether the photographer account exists
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            raise serializers.ValidationError(
+                "Invalid username or password."
+            )
+
+        # Check whether the user is a photographer
+        if not hasattr(user, "photographer_profile"):
+            raise serializers.ValidationError(
+                "Photographer account not found."
+            )
+
+        # Check whether the account is blocked
+        if not user.is_active:
+            raise serializers.ValidationError(
+                "Your photographer account has been blocked by the administrator. Please contact the administrator."
+            )
+
+        # Authenticate username and password
         user = authenticate(
-            username=attrs["username"],
-            password=attrs["password"]
+            username=username,
+            password=password
         )
 
         if not user:
@@ -90,6 +113,7 @@ class LoginSerializer(serializers.Serializer):
         attrs["user"] = user
 
         return attrs
+
     
 
 
@@ -101,11 +125,17 @@ class UpdatePhotographerProfileSerializer(serializers.ModelSerializer):
 
     phone = serializers.RegexField(
         regex=r'^\d{10}$',
-        required=False,
+        required=True,
         error_messages={
             "invalid": "Phone number must contain exactly 10 digits."
         }
     )
+    bio = serializers.CharField(required=False)
+    specialty = serializers.CharField(required=True)
+    location = serializers.CharField(required=True)
+    profile_image = serializers.ImageField(required=True)
+    portfolio_link = serializers.URLField(required=False)
+    portfolio_pdf = serializers.FileField(required=True)
 
     class Meta:
         model = PhotographerProfile
@@ -189,6 +219,8 @@ class UpdatePhotographerProfileSerializer(serializers.ModelSerializer):
             "portfolio_pdf": instance.portfolio_pdf.url if instance.portfolio_pdf else None,
 
             "plan_mode": instance.plan_mode,
+            "verification_status": instance.verification_status,
+            "is_verified": instance.is_verified,
         }
 
 
@@ -218,6 +250,8 @@ class PhotographerProfileSerializer(serializers.ModelSerializer):
             "portfolio_link",
             "portfolio_pdf",
             "plan_mode",
+            "verification_status",
+           
             "created_at",
         ]
 

@@ -1,8 +1,9 @@
 from django.contrib.auth import authenticate
-from rest_framework import serializers
-from django.contrib.auth.models import User
 from django.contrib.auth.models import User
 from rest_framework import serializers
+
+from user.models import UserProfile
+from photographer.models import PhotographerProfile
 
 
 class AdminLoginSerializer(serializers.Serializer):
@@ -37,15 +38,20 @@ class AdminLoginSerializer(serializers.Serializer):
         return attrs
 
 
+# ===========================
+# USER LIST SERIALIZER
+# ===========================
+
 class UserListSerializer(serializers.ModelSerializer):
 
-    phone = serializers.CharField(source="profile.phone", read_only=True)
-    bio = serializers.CharField(source="profile.bio", read_only=True)
+    id = serializers.IntegerField(source="user.id")
+    username = serializers.CharField(source="user.username")
+    email = serializers.EmailField(source="user.email")
 
     status = serializers.SerializerMethodField()
 
     class Meta:
-        model = User
+        model = UserProfile
         fields = [
             "id",
             "username",
@@ -57,53 +63,26 @@ class UserListSerializer(serializers.ModelSerializer):
 
     def get_status(self, obj):
 
-        if obj.is_active:
+        if obj.user.is_active:
             return "Active"
 
         return "Blocked"
-    
 
 
-
-
-
+# ===========================
+# PHOTOGRAPHER LIST SERIALIZER
+# ===========================
 
 class PhotographerListSerializer(serializers.ModelSerializer):
 
-    phone = serializers.CharField(
-        source="photographer_profile.phone",
-        read_only=True
-    )
-
-    specialty = serializers.CharField(
-        source="photographer_profile.specialty",
-        read_only=True
-    )
-
-    location = serializers.CharField(
-        source="photographer_profile.location",
-        read_only=True
-    )
-
-    plan_mode = serializers.CharField(
-        source="photographer_profile.plan_mode",
-        read_only=True
-    )
-
-    verification_status = serializers.CharField(
-        source="photographer_profile.verification_status",
-        read_only=True
-    )
-
-    is_verified = serializers.BooleanField(
-        source="photographer_profile.is_verified",
-        read_only=True
-    )
+    id = serializers.IntegerField(source="user.id")
+    username = serializers.CharField(source="user.username")
+    email = serializers.EmailField(source="user.email")
 
     status = serializers.SerializerMethodField()
 
     class Meta:
-        model = User
+        model = PhotographerProfile
         fields = [
             "id",
             "username",
@@ -119,7 +98,7 @@ class PhotographerListSerializer(serializers.ModelSerializer):
 
     def get_status(self, obj):
 
-        if obj.is_active:
+        if obj.user.is_active:
             return "Active"
 
         return "Blocked"

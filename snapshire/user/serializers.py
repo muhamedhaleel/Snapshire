@@ -35,10 +35,12 @@ class SignupSerializer(serializers.ModelSerializer):
         validated_data.pop("confirm_password")
 
         user = User.objects.create_user(
-            username=validated_data["username"],
-            email=validated_data["email"],
-            password=validated_data["password"],
+        username=validated_data["username"],
+        email=validated_data["email"],
+        password=validated_data["password"],
         )
+
+        UserProfile.objects.create(user=user)
 
         return user
     
@@ -50,19 +52,39 @@ class LoginSerializer(serializers.Serializer):
 
     def validate(self, attrs):
 
+        username = attrs["username"]
+        password = attrs["password"]
+
+        # Check if username exists
+        try:
+            user = User.objects.get(username=username)
+
+        except User.DoesNotExist:
+            raise serializers.ValidationError(
+                "Invalid username or password."
+            )
+
+        # Check if it is a normal user account
+        if not hasattr(user, "profile"):
+            raise serializers.ValidationError(
+                "User account not found."
+            )
+
+        # Check if the account is blocked
+        if not user.is_active:
+            raise serializers.ValidationError(
+                "Your account has been blocked by the administrator. Please contact the administrator."
+            )
+
+        # Authenticate username and password
         user = authenticate(
-            username=attrs["username"],
-            password=attrs["password"]
+            username=username,
+            password=password
         )
 
         if not user:
             raise serializers.ValidationError(
                 "Invalid username or password."
-            )
-
-        if not user.is_active:
-            raise serializers.ValidationError(
-                "Your account has been blocked by the administrator."
             )
 
         attrs["user"] = user
