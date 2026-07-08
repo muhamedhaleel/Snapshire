@@ -132,6 +132,7 @@ class UpdatePhotographerProfileSerializer(serializers.ModelSerializer):
     )
     bio = serializers.CharField(required=False)
     specialty = serializers.CharField(required=True)
+    experience=serializers.CharField(required=True)
     location = serializers.CharField(required=True)
     profile_image = serializers.ImageField(required=True)
     portfolio_link = serializers.URLField(required=False)
@@ -146,6 +147,7 @@ class UpdatePhotographerProfileSerializer(serializers.ModelSerializer):
             "phone",
             "bio",
             "specialty",
+            "experience",
             "location",
             "profile_image",
             "portfolio_link",
@@ -187,6 +189,7 @@ class UpdatePhotographerProfileSerializer(serializers.ModelSerializer):
         instance.phone = validated_data.get("phone", instance.phone)
         instance.bio = validated_data.get("bio", instance.bio)
         instance.specialty = validated_data.get("specialty", instance.specialty)
+        instance.experience = validated_data.get("experience",instance.experience)
         instance.location = validated_data.get("location", instance.location)
         instance.profile_image = validated_data.get("profile_image", instance.profile_image)
         instance.portfolio_link = validated_data.get("portfolio_link", instance.portfolio_link)
@@ -209,6 +212,7 @@ class UpdatePhotographerProfileSerializer(serializers.ModelSerializer):
             "bio": instance.bio,
 
             "specialty": instance.specialty,
+            "experience": instance.experience,
 
             "location": instance.location,
 
@@ -245,6 +249,7 @@ class PhotographerProfileSerializer(serializers.ModelSerializer):
             "phone",
             "bio",
             "specialty",
+            "experience",
             "location",
             "profile_image",
             "portfolio_link",

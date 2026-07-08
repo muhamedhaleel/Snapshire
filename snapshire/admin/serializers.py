@@ -89,6 +89,7 @@ class PhotographerListSerializer(serializers.ModelSerializer):
             "email",
             "phone",
             "specialty",
+            "experience",
             "location",
             "plan_mode",
             "verification_status",
