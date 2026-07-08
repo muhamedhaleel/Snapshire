@@ -10,6 +10,8 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework.parsers import FormParser
 from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
+from photographer.models import PhotographerProfile
+from .serializers import PhotographerViewSerializer
 
 
 @swagger_auto_schema(
@@ -104,5 +106,26 @@ def profile(request):
     )
 
     serializer = UpdateProfileSerializer(profile)
+
+    return Response(serializer.data)
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: PhotographerViewSerializer(many=True)}
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def view_photographers(request):
+
+    photographers = PhotographerProfile.objects.filter(
+        user__is_active=True,
+        is_verified=True
+    )
+
+    serializer = PhotographerViewSerializer(
+        photographers,
+        many=True
+    )
 
     return Response(serializer.data)

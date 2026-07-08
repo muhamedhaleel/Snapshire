@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import UserProfile
+from .models import UserProfile 
+from photographer.models import PhotographerProfile
 from django.contrib.auth import authenticate
 
 
@@ -166,3 +167,22 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
             "location": instance.location,
             "gender": instance.gender,
         }
+    
+
+class PhotographerViewSerializer(serializers.ModelSerializer):
+
+    username = serializers.CharField(
+        source="user.username",
+        read_only=True
+    )
+
+    class Meta:
+        model = PhotographerProfile
+        fields = [
+            "id",
+            "username",
+            "profile_image",
+            "specialty",
+            "location",
+            "portfolio_link",
+        ]
