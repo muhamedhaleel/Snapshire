@@ -49,7 +49,41 @@ class PhotographerProfile(models.Model):
     def __str__(self):
         return self.user.username
 
-    
+class Availability(models.Model):
+
+    photographer = models.ForeignKey(
+        PhotographerProfile,
+        on_delete=models.CASCADE,
+        related_name="availability"
+    )
+
+    date = models.DateField()
+
+    MORNING_CHOICES = [
+        ("available", "Available"),
+        ("unavailable", "Unavailable"),
+    ]
+
+    AFTERNOON_CHOICES = [
+        ("available", "Available"),
+        ("unavailable", "Unavailable"),
+    ]
+
+    morning_status = models.CharField(
+        max_length=20,
+        choices=MORNING_CHOICES,
+        default="unavailable"
+    )
+
+    afternoon_status = models.CharField(
+        max_length=20,
+        choices=AFTERNOON_CHOICES,
+        default="unavailable"
+    )
+
+    class Meta:
+        unique_together = ("photographer", "date")
+
 
 
 

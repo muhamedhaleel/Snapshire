@@ -1,7 +1,8 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import PhotographerProfile
+from .models import PhotographerProfile,Availability
 from django.contrib.auth import authenticate
+
 
 
 class SignupSerializer(serializers.ModelSerializer):
@@ -271,3 +272,23 @@ class VerificationSerializer(serializers.Serializer):
             ("platinum", "Platinum"),
         ]
     )
+
+
+        
+
+
+class AvailabilitySerializer(serializers.ModelSerializer):
+    date = serializers.DateField(
+        help_text="YYYY-MM-DD format"
+    )
+
+    class Meta:
+        model = Availability
+        fields = [
+            "id",
+            "date",
+            "morning_status",
+            "afternoon_status",
+        ]
+
+

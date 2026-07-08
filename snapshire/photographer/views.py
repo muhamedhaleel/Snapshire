@@ -11,7 +11,11 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.permissions import IsAuthenticated
-from .serializers import VerificationSerializer
+from .serializers import VerificationSerializer,AvailabilitySerializer
+import calendar
+from datetime import datetime, date
+from .models import Availability
+
 
 
 @swagger_auto_schema(
@@ -188,3 +192,192 @@ def verification(request):
             )
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@swagger_auto_schema(
+    method="post",
+    request_body=AvailabilitySerializer
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
+def save_availability(request):
+
+    serializer = AvailabilitySerializer(data=request.data)
+
+    if serializer.is_valid():
+
+        profile = request.user.photographer_profile
+
+        availability, created = Availability.objects.update_or_create(
+
+            photographer=profile,
+
+            date=serializer.validated_data["date"],
+
+            defaults={
+
+                "morning_status": serializer.validated_data["morning_status"],
+
+                "afternoon_status": serializer.validated_data["afternoon_status"],
+
+            }
+
+        )
+
+        return Response({
+
+            "message":"Availability saved successfully.",
+
+            "data":AvailabilitySerializer(availability).data
+
+        })
+
+    return Response(serializer.errors,status=400)
+
+
+import calendar
+from datetime import datetime, date
+
+@swagger_auto_schema(method="get")
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def calendar_view(request):
+
+    profile = request.user.photographer_profile
+
+    today = datetime.today()
+
+    month = int(request.GET.get("month", today.month))
+    year = int(request.GET.get("year", today.year))
+
+    total_days = calendar.monthrange(year, month)[1]
+
+    saved = Availability.objects.filter(
+
+        photographer=profile,
+
+        date__year=year,
+
+        date__month=month
+
+    )
+
+    saved_dates = {
+
+        item.date:item
+
+        for item in saved
+
+    }
+
+    data=[]
+
+    for day in range(1,total_days+1):
+
+        current_date=date(year,month,day)
+
+        if current_date in saved_dates:
+
+            item=saved_dates[current_date]
+
+            data.append({
+
+                "id":item.id,
+
+                "date":current_date,
+
+                "morning_status":item.morning_status,
+
+                "afternoon_status":item.afternoon_status
+
+            })
+
+        else:
+
+            data.append({
+
+                "id":None,
+
+                "date":current_date,
+
+                "morning_status":"unavailable",
+
+                "afternoon_status":"unavailable"
+
+            })
+
+    return Response(data)
+
+@swagger_auto_schema(
+    method="put",
+    request_body=AvailabilitySerializer
+)
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
+def update_availability(request, id):
+
+    profile = request.user.photographer_profile
+
+    try:
+        availability = Availability.objects.get(
+            id=id,
+            photographer=profile
+        )
+
+    except Availability.DoesNotExist:
+        return Response(
+            {
+                "error": "Availability not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    serializer = AvailabilitySerializer(
+        availability,
+        data=request.data,
+        partial=True
+    )
+
+    if serializer.is_valid():
+        serializer.save()
+
+        return Response(
+            {
+                "message": "Availability updated successfully.",
+                "data": serializer.data
+            },
+            status=status.HTTP_200_OK
+        )
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@swagger_auto_schema(method="delete")
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_availability(request, id):
+
+    profile = request.user.photographer_profile
+
+    try:
+        availability = Availability.objects.get(
+            id=id,
+            photographer=profile
+        )
+
+    except Availability.DoesNotExist:
+        return Response(
+            {
+                "error": "Availability not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    availability.delete()
+
+    return Response(
+        {
+            "message": "Availability deleted successfully."
+        },
+        status=status.HTTP_200_OK
+    )
