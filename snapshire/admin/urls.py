@@ -45,4 +45,12 @@ urlpatterns = [
         name="verify_photographer"
     ),
 
+    path(
+    "booking-management/",
+    views.admin_booking_management,
+    name="admin-booking-management",
+),
+
+    
+
 ]

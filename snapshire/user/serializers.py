@@ -3,6 +3,8 @@ from rest_framework import serializers
 from .models import UserProfile 
 from photographer.models import PhotographerProfile
 from django.contrib.auth import authenticate
+from .models import Booking
+
 
 
 class SignupSerializer(serializers.ModelSerializer):
@@ -186,3 +188,99 @@ class PhotographerViewSerializer(serializers.ModelSerializer):
             "location",
             "portfolio_link",
         ]
+
+
+class PhotographerDetailSerializer(serializers.ModelSerializer):
+
+    username = serializers.CharField(source="user.username")
+    email = serializers.EmailField(source="user.email")
+
+    booking_policy = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PhotographerProfile
+        fields = [
+            "id",
+            "username",
+            "email",
+            "profile_image",
+            "specialty",
+            "experience",
+            "location",
+            "bio",
+            "portfolio_link",
+            "booking_policy",
+        ]
+
+    def get_booking_policy(self, obj):
+
+        return {
+            "advance_payment": "50% Advance Payment Required",
+            "cancellation": "100% refund only if cancelled at least 24 hours before the booking.",
+            "late_cancellation": "No refund for cancellations made within 24 hours of the booking.",
+            "reschedule": "Rescheduling depends on photographer availability."
+        }
+
+
+
+from rest_framework import serializers
+from photographer.models import Availability
+
+
+from rest_framework import serializers
+from photographer.models import Availability
+
+
+class PhotographerAvailabilitySerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Availability
+        fields = [
+            "id",
+            "date",
+            "morning_status",
+            "afternoon_status",
+        ]
+
+
+
+class BookingSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Booking
+        fields = [
+            "photographer",
+            "date",
+            "session",
+            "location",
+            "shoot_time",
+            "hours",
+            "requirements",
+        ]
+
+
+
+class UserBookingStatusSerializer(serializers.ModelSerializer):
+
+    photographer_name = serializers.CharField(
+        source="photographer.user.username",
+        read_only=True
+    )
+
+    class Meta:
+        model = Booking
+        fields = [
+            "id",
+            "photographer_name",
+            "location",
+            "date",
+            "session",
+            "shoot_time",
+            "status"
+            
+        ]
+
+
+
+
+

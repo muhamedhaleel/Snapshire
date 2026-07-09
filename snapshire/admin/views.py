@@ -9,13 +9,14 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from drf_yasg.utils import swagger_auto_schema
 
-from user.models import UserProfile
+from user.models import UserProfile,Booking
 from photographer.models import PhotographerProfile
 
 from .serializers import (
     AdminLoginSerializer,
     UserListSerializer,
     PhotographerListSerializer,
+    AdminBookingManagementSerializer
 )
 
 
@@ -264,3 +265,27 @@ def verify_photographer(request, photographer_id):
     },
     status=status.HTTP_200_OK,
 )
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: AdminBookingManagementSerializer(many=True)}
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_booking_management(request):
+
+    bookings = Booking.objects.select_related(
+        "user",
+        "photographer",
+        "photographer__user"
+    ).order_by("-created_at")
+
+    serializer = AdminBookingManagementSerializer(
+        bookings,
+        many=True
+    )
+
+    return Response(serializer.data)
+
+

@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from user.models import UserProfile
 from photographer.models import PhotographerProfile
+from user.models import Booking
 
 
 class AdminLoginSerializer(serializers.Serializer):
@@ -103,3 +104,34 @@ class PhotographerListSerializer(serializers.ModelSerializer):
             return "Active"
 
         return "Blocked"
+    
+
+
+class AdminBookingManagementSerializer(serializers.ModelSerializer):
+
+    user_name = serializers.CharField(
+        source="user.username",
+        read_only=True
+    )
+
+    photographer_name = serializers.CharField(
+        source="photographer.user.username",
+        read_only=True
+    )
+
+    class Meta:
+        model = Booking
+        fields = [
+            "id",
+            "user_name",
+            "photographer_name",
+            "location",
+            "date",
+            "session",
+            "shoot_time",
+            "hours",
+            "total_amount",
+            
+            "status",
+            "created_at",
+        ]

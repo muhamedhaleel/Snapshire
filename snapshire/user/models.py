@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from django.db import models
+from photographer.models import PhotographerProfile
 
 
 class UserProfile(models.Model):
@@ -25,3 +26,79 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return self.user.username
+
+
+
+class Booking(models.Model):
+
+    SESSION_CHOICES = [
+        ("morning", "Morning"),
+        ("afternoon", "Afternoon"),
+    ]
+
+    STATUS_CHOICES = [
+        ("payment_pending", "Payment Pending"),
+        ("waiting_photographer", "Waiting for Photographer"),
+        ("photographer_accepted", "Photographer Accepted"),
+        ("photographer_rejected", "Photographer Rejected"),
+        ("waiting_admin", "Waiting for Admin"),
+        ("confirmed", "Confirmed"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="bookings"
+    )
+
+    photographer = models.ForeignKey(
+        PhotographerProfile,
+        on_delete=models.CASCADE,
+        related_name="bookings"
+    )
+
+    date = models.DateField()
+
+    session = models.CharField(
+        max_length=20,
+        choices=SESSION_CHOICES
+    )
+
+    location = models.CharField(max_length=255)
+
+    shoot_time = models.TimeField()
+
+    hours = models.PositiveIntegerField()
+
+    requirements = models.TextField(blank=True)
+
+    total_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
+
+    advance_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
+
+    balance_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
+
+    status = models.CharField(
+        max_length=30,
+        choices=STATUS_CHOICES,
+        default="payment_pending"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.photographer.user.username}"
