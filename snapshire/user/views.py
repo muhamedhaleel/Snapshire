@@ -18,6 +18,8 @@ import calendar
 from .models import Booking
 from .serializers import BookingSerializer,UserBookingStatusSerializer
 from decimal import Decimal
+from .models import Notification
+from .serializers import NotificationSerializer
 
 
 
@@ -457,4 +459,21 @@ def user_booking_status(request):
         many=True
     )
 
+    return Response(serializer.data)
+
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def user_notifications(request):
+
+    notifications = Notification.objects.filter(
+        user=request.user
+    )
+
+    serializer = NotificationSerializer(
+        notifications,
+        many=True
+    )
     return Response(serializer.data)

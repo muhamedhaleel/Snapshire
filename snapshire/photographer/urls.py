@@ -14,7 +14,9 @@ urlpatterns = [
     path("add-availability/",views.save_availability,name="add-availability"),
     path("update-availability/<int:id>/",views.update_availability,name="update-availability"),
     path("delete-availability/<int:id>/",views.delete_availability,name="delete-availability"),
-    path("my-availability/",views.my_availability,name="my-availability",
-),
+    path("my-availability/",views.my_availability,name="my-availability"),
+    path("notifications/",views.photographer_notifications,name="photographer_notifications")
+
+
 
 ]

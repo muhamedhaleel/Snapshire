@@ -4,6 +4,8 @@ from .models import UserProfile
 from photographer.models import PhotographerProfile
 from django.contrib.auth import authenticate
 from .models import Booking
+from rest_framework import serializers
+from .models import Notification
 
 
 
@@ -281,6 +283,16 @@ class UserBookingStatusSerializer(serializers.ModelSerializer):
         ]
 
 
+class NotificationSerializer(serializers.ModelSerializer):
 
+    class Meta:
+        model = Notification
+        fields = [
+            "id",
+            "title",
+            "message",
+            "is_read",
+            "created_at",
+        ]
 
 

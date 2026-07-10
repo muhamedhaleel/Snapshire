@@ -2,6 +2,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 from .models import PhotographerProfile,Availability
 from django.contrib.auth import authenticate
+from user.models import Notification
 
 
 
@@ -303,4 +304,15 @@ class MyAvailabilitySerializer(serializers.ModelSerializer):
             "afternoon_status",
         ]
 
+class NotificationSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Notification
+        fields = [
+            "id",
+            "title",
+            "message",
+            "is_read",
+            "created_at",
+        ]
 

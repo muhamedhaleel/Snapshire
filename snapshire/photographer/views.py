@@ -15,9 +15,27 @@ from .serializers import VerificationSerializer,AvailabilitySerializer,MyAvailab
 import calendar
 from datetime import datetime, date
 from .models import Availability
+from user.models import Notification
+from user.serializers import NotificationSerializer
 
 
+from rest_framework.response import Response
+from rest_framework import status
 
+
+def check_photographer_verification(request):
+
+    profile = request.user.photographer_profile
+
+    if not profile.is_verified:
+        return Response(
+            {
+                "error": "Your account is waiting for admin approval."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    return None
 
 @swagger_auto_schema(
     method="post",
@@ -202,6 +220,9 @@ def verification(request):
 @permission_classes([IsAuthenticated])
 @parser_classes([FormParser])
 def save_availability(request):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     serializer = AvailabilitySerializer(data=request.data)
 
@@ -243,6 +264,9 @@ from datetime import datetime, date
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def calendar_view(request):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     profile = request.user.photographer_profile
 
@@ -317,6 +341,9 @@ def calendar_view(request):
 @permission_classes([IsAuthenticated])
 @parser_classes([FormParser])
 def update_availability(request, id):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     profile = request.user.photographer_profile
 
@@ -391,6 +418,9 @@ def delete_availability(request, id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_availability(request):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     profile = request.user.photographer_profile
 
@@ -400,6 +430,24 @@ def my_availability(request):
 
     serializer = MyAvailabilitySerializer(
         availability,
+        many=True
+    )
+
+    return Response(serializer.data)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def photographer_notifications(request):
+    response = check_photographer_verification(request)
+    if response:
+        return response
+
+    notifications = Notification.objects.filter(
+        user=request.user
+    ).order_by("-created_at")
+
+    serializer = NotificationSerializer(
+        notifications,
         many=True
     )
 

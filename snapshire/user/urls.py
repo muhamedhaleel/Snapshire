@@ -17,7 +17,7 @@ urlpatterns = [
     path(
         "bookings/status/",
         views.user_booking_status,
-        name="user-booking-status",
-    ),
+        name="user-booking-status"),
+    path("notifications/",views.user_notifications,name="user_notifications")
      
 ]
