@@ -292,3 +292,15 @@ class AvailabilitySerializer(serializers.ModelSerializer):
         ]
 
 
+class MyAvailabilitySerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Availability
+        fields = [
+            "id",
+            "date",
+            "morning_status",
+            "afternoon_status",
+        ]
+
+

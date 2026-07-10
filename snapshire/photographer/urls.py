@@ -10,28 +10,11 @@ urlpatterns = [
     path("profile/update/",views.profile_update,name="photographer_profile_update"),
     path("profile/",views.profile,name="photographer_profile"),
     path("verification/",views.verification,name="photographer_verification"),
-    path(
-        "calendar/",
-        views.calendar_view,
-        name="calendar"
-    ),
-
-    path(
-        "add-availability/",
-        views.save_availability,
-        name="add-availability"
-    ),
-
-     path(
-        "update-availability/<int:id>/",
-        views.update_availability,
-        name="update-availability"
-    ),
-
-    path(
-        "delete-availability/<int:id>/",
-        views.delete_availability,
-        name="delete-availability"
-    ),
+    path("calendar/",views.calendar_view,name="calendar"),
+    path("add-availability/",views.save_availability,name="add-availability"),
+    path("update-availability/<int:id>/",views.update_availability,name="update-availability"),
+    path("delete-availability/<int:id>/",views.delete_availability,name="delete-availability"),
+    path("my-availability/",views.my_availability,name="my-availability",
+),
 
 ]

@@ -11,10 +11,11 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.permissions import IsAuthenticated
-from .serializers import VerificationSerializer,AvailabilitySerializer
+from .serializers import VerificationSerializer,AvailabilitySerializer,MyAvailabilitySerializer
 import calendar
 from datetime import datetime, date
 from .models import Availability
+
 
 
 
@@ -381,3 +382,25 @@ def delete_availability(request, id):
         },
         status=status.HTTP_200_OK
     )
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: MyAvailabilitySerializer(many=True)}
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_availability(request):
+
+    profile = request.user.photographer_profile
+
+    availability = Availability.objects.filter(
+        photographer=profile
+    ).order_by("date")
+
+    serializer = MyAvailabilitySerializer(
+        availability,
+        many=True
+    )
+
+    return Response(serializer.data)
