@@ -244,6 +244,198 @@ def photographer_availability(request, photographer_id):
 
     return Response(data)
 
+# @swagger_auto_schema(
+#     method="post",
+#     request_body=BookingSerializer
+# )
+# @api_view(["POST"])
+# @permission_classes([IsAuthenticated])
+# def create_booking(request):
+
+#     serializer = BookingSerializer(data=request.data)
+
+#     if serializer.is_valid():
+
+#         photographer = serializer.validated_data["photographer"]
+#         booking_date = serializer.validated_data["date"]
+#         session = serializer.validated_data["session"]
+
+#         # Check photographer verification
+#         if not photographer.is_verified:
+
+#             return Response(
+#                 {
+#                     "error": "Photographer is not verified."
+#                 },
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
+
+#         # Check availability exists
+#         try:
+
+#             availability = Availability.objects.get(
+#                 photographer=photographer,
+#                 date=booking_date
+#             )
+
+#         except Availability.DoesNotExist:
+
+#             return Response(
+#                 {
+#                     "error": "Photographer is not available on this date."
+#                 },
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
+
+#         # Check session availability
+#         if session == "morning":
+
+#             if availability.morning_status != "available":
+
+#                 return Response(
+#                     {
+#                         "error": "Morning session is unavailable."
+#                     },
+#                     status=status.HTTP_400_BAD_REQUEST
+#                 )
+
+#         elif session == "afternoon":
+
+#             if availability.afternoon_status != "available":
+
+#                 return Response(
+#                     {
+#                         "error": "Afternoon session is unavailable."
+#                     },
+#                     status=status.HTTP_400_BAD_REQUEST
+#                 )
+
+#         # Prevent double booking
+#         booking_exists = Booking.objects.filter(
+#             photographer=photographer,
+#             date=booking_date,
+#             session=session,
+#             status__in=[
+#                 "payment_pending",
+#                 "waiting_photographer",
+#                 "photographer_accepted",
+#                 "waiting_admin",
+#                 "confirmed"
+#             ]
+#         ).exists()
+
+#         if booking_exists:
+
+#             return Response(
+#                 {
+#                     "error": "This session has already been booked."
+#                 },
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
+#     active_booking = Booking.objects.filter(
+#     user=request.user,
+#     status__in=[
+#         "payment_pending",
+#         "waiting_photographer",
+#         "photographer_accepted",
+#         "waiting_admin",
+#         "confirmed",
+#     ]
+#     ).exists()
+
+#     if active_booking:
+#         return Response(
+#             {
+#                 "error": "You already have an active booking. Complete or cancel it before booking another photographer."
+#             },
+#             status=status.HTTP_400_BAD_REQUEST
+#         )
+
+
+
+
+
+#     # ------------------------
+#     # Price Calculation
+#     # ------------------------
+
+#     try:
+#         experience = int(photographer.experience)
+
+#     except:
+
+#         experience = 1
+
+#         hourly_rate = experience * 200
+
+#         hours = serializer.validated_data["hours"]
+
+#         platform_fee = Decimal("15.00")
+
+#         total_amount = Decimal(hourly_rate * hours) + platform_fee
+
+#         advance_amount = total_amount * Decimal("0.50")
+
+#         balance_amount = total_amount - advance_amount
+
+#         # ------------------------
+#         # Create Booking
+#         # ------------------------
+
+#         booking = Booking.objects.create(
+
+#             user=request.user,
+
+#             photographer=photographer,
+
+#             date=booking_date,
+
+#             session=session,
+
+#             location=serializer.validated_data["location"],
+
+#             shoot_time=serializer.validated_data["shoot_time"],
+
+#             hours=hours,
+
+#             requirements=serializer.validated_data["requirements"],
+
+#             total_amount=total_amount,
+
+#             advance_amount=advance_amount,
+
+#             balance_amount=balance_amount,
+
+#             status="payment_pending"
+
+#         )
+
+#         return Response(
+
+#             {
+
+#                 "message": "Booking created successfully.",
+
+#                 "booking_id": booking.id,
+
+#                 "total_amount": booking.total_amount,
+
+#                 "advance_amount": booking.advance_amount,
+
+#                 "balance_amount": booking.balance_amount,
+
+#                 "status": booking.status
+
+#             },
+
+#             status=status.HTTP_201_CREATED
+
+#         )
+
+#     return Response(
+#         serializer.errors,
+#         status=status.HTTP_400_BAD_REQUEST
+#     )
 @swagger_auto_schema(
     method="post",
     request_body=BookingSerializer
@@ -254,93 +446,108 @@ def create_booking(request):
 
     serializer = BookingSerializer(data=request.data)
 
-    if serializer.is_valid():
+    if not serializer.is_valid():
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-        photographer = serializer.validated_data["photographer"]
-        booking_date = serializer.validated_data["date"]
-        session = serializer.validated_data["session"]
+    photographer = serializer.validated_data["photographer"]
+    booking_date = serializer.validated_data["date"]
+    session = serializer.validated_data["session"]
 
-        # Check photographer verification
-        if not photographer.is_verified:
+    # ------------------------
+    # Check photographer verification
+    # ------------------------
 
-            return Response(
-                {
-                    "error": "Photographer is not verified."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
+    if not photographer.is_verified:
+        return Response(
+            {
+                "error": "Photographer is not verified."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-        # Check availability exists
-        try:
+    # ------------------------
+    # Check availability exists
+    # ------------------------
 
-            availability = Availability.objects.get(
-                photographer=photographer,
-                date=booking_date
-            )
-
-        except Availability.DoesNotExist:
-
-            return Response(
-                {
-                    "error": "Photographer is not available on this date."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Check session availability
-        if session == "morning":
-
-            if availability.morning_status != "available":
-
-                return Response(
-                    {
-                        "error": "Morning session is unavailable."
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-        elif session == "afternoon":
-
-            if availability.afternoon_status != "available":
-
-                return Response(
-                    {
-                        "error": "Afternoon session is unavailable."
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-        # Prevent double booking
-        booking_exists = Booking.objects.filter(
+    try:
+        availability = Availability.objects.get(
             photographer=photographer,
-            date=booking_date,
-            session=session,
-            status__in=[
-                "payment_pending",
-                "waiting_photographer",
-                "photographer_accepted",
-                "waiting_admin",
-                "confirmed"
-            ]
-        ).exists()
+            date=booking_date
+        )
 
-        if booking_exists:
+    except Availability.DoesNotExist:
+        return Response(
+            {
+                "error": "Photographer is not available on this date."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
+    # ------------------------
+    # Check session availability
+    # ------------------------
+
+    if session == "morning":
+
+        if availability.morning_status != "available":
             return Response(
                 {
-                    "error": "This session has already been booked."
+                    "error": "Morning session is unavailable."
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+    elif session == "afternoon":
+
+        if availability.afternoon_status != "available":
+            return Response(
+                {
+                    "error": "Afternoon session is unavailable."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    # ------------------------
+    # Prevent double booking
+    # ------------------------
+
+    booking_exists = Booking.objects.filter(
+        photographer=photographer,
+        date=booking_date,
+        session=session,
+        status__in=[
+            "payment_pending",
+            "waiting_photographer",
+            "photographer_accepted",
+            "waiting_admin",
+            "confirmed"
+        ]
+    ).exists()
+
+    if booking_exists:
+        return Response(
+            {
+                "error": "This session has already been booked."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # ------------------------
+    # Prevent multiple active bookings
+    # ------------------------
+
     active_booking = Booking.objects.filter(
-    user=request.user,
-    status__in=[
-        "payment_pending",
-        "waiting_photographer",
-        "photographer_accepted",
-        "waiting_admin",
-        "confirmed",
-    ]
+        user=request.user,
+        status__in=[
+            "payment_pending",
+            "waiting_photographer",
+            "photographer_accepted",
+            "waiting_admin",
+            "confirmed"
+        ]
     ).exists()
 
     if active_booking:
@@ -351,92 +558,63 @@ def create_booking(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    # ------------------------
+    # Price Calculation
+    # ------------------------
 
+    try:
+        experience = int(photographer.experience)
+    except ValueError:
+        experience = 1
 
+    hourly_rate = experience * 200
 
+    hours = serializer.validated_data["hours"]
 
-        # ------------------------
-        # Price Calculation
-        # ------------------------
+    platform_fee = Decimal("15.00")
 
-        try:
-            experience = int(photographer.experience)
+    total_amount = Decimal(hourly_rate * hours) + platform_fee
 
-        except:
+    advance_amount = total_amount * Decimal("0.50")
 
-            experience = 1
+    balance_amount = total_amount - advance_amount
 
-        hourly_rate = experience * 200
+    # ------------------------
+    # Create Booking
+    # ------------------------
 
-        hours = serializer.validated_data["hours"]
+    booking = Booking.objects.create(
 
-        platform_fee = Decimal("15.00")
+        user=request.user,
+        photographer=photographer,
+        date=booking_date,
+        session=session,
+        location=serializer.validated_data["location"],
+        shoot_time=serializer.validated_data["shoot_time"],
+        hours=hours,
+        requirements=serializer.validated_data["requirements"],
+        total_amount=total_amount,
+        advance_amount=advance_amount,
+        balance_amount=balance_amount,
+        status="payment_pending"
 
-        total_amount = Decimal(hourly_rate * hours) + platform_fee
-
-        advance_amount = total_amount * Decimal("0.50")
-
-        balance_amount = total_amount - advance_amount
-
-        # ------------------------
-        # Create Booking
-        # ------------------------
-
-        booking = Booking.objects.create(
-
-            user=request.user,
-
-            photographer=photographer,
-
-            date=booking_date,
-
-            session=session,
-
-            location=serializer.validated_data["location"],
-
-            shoot_time=serializer.validated_data["shoot_time"],
-
-            hours=hours,
-
-            requirements=serializer.validated_data["requirements"],
-
-            total_amount=total_amount,
-
-            advance_amount=advance_amount,
-
-            balance_amount=balance_amount,
-
-            status="payment_pending"
-
-        )
-
-        return Response(
-
-            {
-
-                "message": "Booking created successfully.",
-
-                "booking_id": booking.id,
-
-                "total_amount": booking.total_amount,
-
-                "advance_amount": booking.advance_amount,
-
-                "balance_amount": booking.balance_amount,
-
-                "status": booking.status
-
-            },
-
-            status=status.HTTP_201_CREATED
-
-        )
-
-    return Response(
-        serializer.errors,
-        status=status.HTTP_400_BAD_REQUEST
     )
 
+    return Response(
+        {
+            "message": "Booking created successfully.",
+            "booking_id": booking.id,
+            "photographer": photographer.user.username,
+            "date": booking.date,
+            "session": booking.session,
+            "location": booking.location,
+            "total_amount": booking.total_amount,
+            "advance_amount": booking.advance_amount,
+            "balance_amount": booking.balance_amount,
+            "status": booking.status
+        },
+        status=status.HTTP_201_CREATED
+    )
 
 
 @swagger_auto_schema(
