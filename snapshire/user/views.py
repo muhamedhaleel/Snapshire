@@ -12,7 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
 from photographer.models import PhotographerProfile
 from photographer.models import Availability
-from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerAvailabilitySerializer
+from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerAvailabilitySerializer,PhotographerFilterSerializer
 from datetime import datetime
 import calendar
 from .models import Booking
@@ -20,6 +20,11 @@ from .serializers import BookingSerializer,UserBookingStatusSerializer
 from decimal import Decimal
 from .models import Notification
 from .serializers import NotificationSerializer
+from django.db.models import Q
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from drf_yasg import openapi
 
 
 
@@ -75,10 +80,10 @@ def login(request):
 
 
 @swagger_auto_schema(
-    method="put",
+    method="patch",
     request_body=UpdateProfileSerializer
 )
-@api_view(["PUT"])
+@api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 @parser_classes([FormParser])
 def profile_update(request):
@@ -654,4 +659,108 @@ def user_notifications(request):
         notifications,
         many=True
     )
+    return Response(serializer.data)
+
+
+@swagger_auto_schema(
+    method="get",
+    
+    operation_description="Filter photographers by location, available date, or experience.",
+
+    manual_parameters=[
+
+        openapi.Parameter(
+            name="location",
+            in_=openapi.IN_QUERY,
+            description="Enter photographer location (Example: Kochi)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+
+        openapi.Parameter(
+            name="date",
+            in_=openapi.IN_QUERY,
+            description="Available date (YYYY-MM-DD)",
+            type=openapi.TYPE_STRING,
+            format="date",
+            required=False,
+        ),
+
+        openapi.Parameter(
+            name="experience",
+            in_=openapi.IN_QUERY,
+            description="Sort by experience",
+            type=openapi.TYPE_STRING,
+            enum=["asc", "desc"],
+            required=False,
+        ),
+    ],
+)
+
+@api_view(["GET"])
+def photographer_filter(request):
+
+    location = request.GET.get("location")
+    booking_date = request.GET.get("date")
+    experience = request.GET.get("experience")
+
+    # Require at least one filter
+    if not (location or booking_date or experience):
+        return Response(
+            {
+                "error": "Please provide at least one filter."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    photographers = PhotographerProfile.objects.filter(
+        is_verified=True,
+        user__is_active=True
+    )
+
+    # Filter by location
+    if location:
+        photographers = photographers.filter(
+            location__icontains=location
+        )
+
+    # Filter by available date
+    if booking_date:
+
+        photographers = photographers.filter(
+
+            Q(
+                availability__date=booking_date,
+                availability__morning_status="available"
+            )
+            |
+            Q(
+                availability__date=booking_date,
+                availability__afternoon_status="available"
+            )
+
+        ).distinct()
+
+    # Sort by experience
+    if experience:
+
+        if experience.lower() == "asc":
+            photographers = photographers.order_by("experience")
+
+        elif experience.lower() == "desc":
+            photographers = photographers.order_by("-experience")
+
+        else:
+            return Response(
+                {
+                    "error": "Experience must be 'asc' or 'desc'."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    serializer = PhotographerFilterSerializer(
+        photographers,
+        many=True
+    )
+
     return Response(serializer.data)

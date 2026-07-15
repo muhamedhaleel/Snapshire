@@ -18,6 +18,8 @@ urlpatterns = [
         "bookings/status/",
         views.user_booking_status,
         name="user-booking-status"),
-    path("notifications/",views.user_notifications,name="user_notifications")
+    path("notifications/",views.user_notifications,name="user_notifications"),
+    path("photographers/filter/",views.photographer_filter,name="photographer-filter")
+    
      
 ]

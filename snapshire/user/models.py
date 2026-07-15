@@ -5,6 +5,10 @@ from photographer.models import PhotographerProfile
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    first_name = models.CharField(max_length=100,blank=True,default="")
+
+    last_name = models.CharField(max_length=100,blank=True,default="")
+    
     phone = models.CharField(max_length=20, blank=True, default='')
     bio = models.TextField(blank=True, default='')
     location = models.CharField(max_length=100, blank=True, default='')
