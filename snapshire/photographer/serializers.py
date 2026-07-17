@@ -126,6 +126,10 @@ class UpdatePhotographerProfileSerializer(serializers.ModelSerializer):
 
     email = serializers.EmailField(required=False)
 
+    first_name = serializers.CharField(required=True)
+
+    last_name = serializers.CharField(required=True)
+ 
     phone = serializers.RegexField(
         regex=r'^\d{10}$',
         required=True,
@@ -147,6 +151,8 @@ class UpdatePhotographerProfileSerializer(serializers.ModelSerializer):
         fields = [
             "username",
             "email",
+            "first_name",
+            "last_name",
             "phone",
             "bio",
             "specialty",
@@ -187,6 +193,12 @@ class UpdatePhotographerProfileSerializer(serializers.ModelSerializer):
         if "email" in validated_data:
             instance.user.email = validated_data["email"]
 
+        if "first_name" in validated_data:
+            instance.user.first_name = validated_data["first_name"]
+
+        if "last_name" in validated_data:
+            instance.user.last_name = validated_data["last_name"]
+
         instance.user.save()
 
         instance.phone = validated_data.get("phone", instance.phone)
@@ -209,6 +221,8 @@ class UpdatePhotographerProfileSerializer(serializers.ModelSerializer):
             "username": instance.user.username,
 
             "email": instance.user.email,
+            "first_name": instance.user.first_name,
+            "last_name": instance.user.last_name,
 
             "phone": instance.phone,
 
