@@ -226,15 +226,22 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
 
+    # Update User model
         if "username" in validated_data:
             instance.user.username = validated_data["username"]
 
         if "email" in validated_data:
             instance.user.email = validated_data["email"]
 
+        if "first_name" in validated_data:
+            instance.user.first_name = validated_data["first_name"]
+
+        if "last_name" in validated_data:
+            instance.user.last_name = validated_data["last_name"]
+
         instance.user.save()
-        instance.first_name=validated_data.get("first_name",instance.first_name)
-        instance.last_name=validated_data.get("last_name",instance.last_name)
+
+    # Update UserProfile model
         instance.phone = validated_data.get("phone", instance.phone)
         instance.bio = validated_data.get("bio", instance.bio)
         instance.location = validated_data.get("location", instance.location)
@@ -249,7 +256,7 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
         return {
             "username": instance.user.username,
             "first_name":instance.user.first_name,
-            "last_name":instance.uses.last_name,
+            "last_name":instance.user.last_name,
             "email": instance.user.email,
             "phone": instance.phone,
             "bio": instance.bio,
@@ -308,26 +315,6 @@ class PhotographerDetailSerializer(serializers.ModelSerializer):
             "reschedule": "Rescheduling depends on photographer availability."
         }
 
-
-
-from rest_framework import serializers
-from photographer.models import Availability
-
-
-from rest_framework import serializers
-from photographer.models import Availability
-
-
-class PhotographerAvailabilitySerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = Availability
-        fields = [
-            "id",
-            "date",
-            "morning_status",
-            "afternoon_status",
-        ]
 
 
 

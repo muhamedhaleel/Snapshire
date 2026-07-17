@@ -1,8 +1,9 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import PhotographerProfile,Availability
+from .models import PhotographerProfile
 from django.contrib.auth import authenticate
 from user.models import Notification
+from.models import WeeklyAvailability,AvailabilityException
 
 
 
@@ -277,33 +278,6 @@ class VerificationSerializer(serializers.Serializer):
 
         
 
-
-class AvailabilitySerializer(serializers.ModelSerializer):
-    date = serializers.DateField(
-        help_text="YYYY-MM-DD format"
-    )
-
-    class Meta:
-        model = Availability
-        fields = [
-            "id",
-            "date",
-            "morning_status",
-            "afternoon_status",
-        ]
-
-
-class MyAvailabilitySerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = Availability
-        fields = [
-            "id",
-            "date",
-            "morning_status",
-            "afternoon_status",
-        ]
-
 class NotificationSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -315,4 +289,45 @@ class NotificationSerializer(serializers.ModelSerializer):
             "is_read",
             "created_at",
         ]
+
+
+class WeeklyAvailabilitySerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = WeeklyAvailability
+        fields = [
+            "id",
+            "weekday",
+            "morning",
+            "afternoon",
+        ]
+
+    def validate_weekday(self, value):
+        if value not in range(0, 7):
+            raise serializers.ValidationError(
+                "Weekday must be between 0 (Monday) and 6 (Sunday)."
+            )
+        return value
+
+class AvailabilityExceptionSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = AvailabilityException
+        fields = [
+            "id",
+            "date",
+            "session",
+            "reason",
+        ]
+
+    def validate_date(self, value):
+
+        from datetime import date
+
+        if value < date.today():
+            raise serializers.ValidationError(
+                "Cannot add exception for a past date."
+            )
+
+        return value
 

@@ -11,10 +11,7 @@ from rest_framework.parsers import FormParser
 from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
 from photographer.models import PhotographerProfile
-from photographer.models import Availability
-from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerAvailabilitySerializer,PhotographerFilterSerializer
-from datetime import datetime
-import calendar
+from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerFilterSerializer
 from .models import Booking
 from .serializers import BookingSerializer,UserBookingStatusSerializer
 from decimal import Decimal
@@ -25,6 +22,10 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from drf_yasg import openapi
+from photographer.models import PhotographerProfile,WeeklyAvailability,AvailabilityException
+from datetime import date, timedelta
+from datetime import datetime
+
 
 
 
@@ -135,7 +136,7 @@ def view_photographers(request):
     photographers = PhotographerProfile.objects.filter(
         user__is_active=True,
         is_verified=True
-    )
+    ).order_by("-created_at")
 
     serializer = PhotographerViewSerializer(
         photographers,
@@ -176,6 +177,9 @@ def photographer_detail(request, id):
     return Response(serializer.data)
 
 
+
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def photographer_availability(request, photographer_id):
@@ -193,20 +197,15 @@ def photographer_availability(request, photographer_id):
             status=404
         )
 
-    today = datetime.today()
+    days = int(request.GET.get("days", 30))
 
-    month = int(request.GET.get("month", today.month))
-    year = int(request.GET.get("year", today.year))
+    today = date.today()
 
-    availability = Availability.objects.filter(
-        photographer=photographer,
-        date__year=year,
-        date__month=month
-    ).order_by("date")
+    end_date = today + timedelta(days=days)
 
     data = []
 
-    ACTIVE_BOOKING_STATUS = [
+    ACTIVE_STATUS = [
         "payment_pending",
         "waiting_photographer",
         "photographer_accepted",
@@ -215,37 +214,68 @@ def photographer_availability(request, photographer_id):
         "completed",
     ]
 
-    for item in availability:
+    current = today
 
-        morning = item.morning_status
-        afternoon = item.afternoon_status
+    while current <= end_date:
 
-        morning_booked = Booking.objects.filter(
+        weekday = current.isoweekday()
+
+        weekly = WeeklyAvailability.objects.filter(
             photographer=photographer,
-            date=item.date,
-            session="morning",
-            status__in=ACTIVE_BOOKING_STATUS
-        ).exists()
+            weekday=weekday
+        ).first()
 
-        afternoon_booked = Booking.objects.filter(
-            photographer=photographer,
-            date=item.date,
-            session="afternoon",
-            status__in=ACTIVE_BOOKING_STATUS
-        ).exists()
+        if weekly:
 
-        if morning_booked:
-            morning = "unavailable"
+            morning = weekly.morning
+            afternoon = weekly.afternoon
 
-        if afternoon_booked:
-            afternoon = "unavailable"
+            exceptions = AvailabilityException.objects.filter(
+                photographer=photographer,
+                date=current
+            )
 
-        data.append({
-            "id": item.id,
-            "date": item.date,
-            "morning_status": morning,
-            "afternoon_status": afternoon
-        })
+            for exception in exceptions:
+
+                if exception.session == "full_day":
+                    morning = False
+                    afternoon = False
+
+                elif exception.session == "morning":
+                    morning = False
+
+                elif exception.session == "afternoon":
+                    afternoon = False
+
+            if Booking.objects.filter(
+                photographer=photographer,
+                date=current,
+                session="morning",
+                status__in=ACTIVE_STATUS
+            ).exists():
+                morning = False
+
+            if Booking.objects.filter(
+                photographer=photographer,
+                date=current,
+                session="afternoon",
+                status__in=ACTIVE_STATUS
+            ).exists():
+                afternoon = False
+
+            if morning or afternoon:
+
+                data.append({
+
+                    "date": current,
+
+                    "morning": morning,
+
+                    "afternoon": afternoon
+
+                })
+
+        current += timedelta(days=1)
 
     return Response(data)
 
@@ -441,6 +471,8 @@ def photographer_availability(request, photographer_id):
 #         serializer.errors,
 #         status=status.HTTP_400_BAD_REQUEST
 #     )
+
+
 @swagger_auto_schema(
     method="post",
     request_body=BookingSerializer
@@ -467,56 +499,59 @@ def create_booking(request):
 
     if not photographer.is_verified:
         return Response(
-            {
-                "error": "Photographer is not verified."
-            },
+            {"error": "Photographer is not verified."},
             status=status.HTTP_400_BAD_REQUEST
         )
 
     # ------------------------
-    # Check availability exists
+    # Check Weekly Availability
     # ------------------------
 
-    try:
-        availability = Availability.objects.get(
-            photographer=photographer,
-            date=booking_date
-        )
+    weekday = booking_date.isoweekday()
 
-    except Availability.DoesNotExist:
+    weekly = WeeklyAvailability.objects.filter(
+        photographer=photographer,
+        weekday=weekday
+    ).first()
+
+    if not weekly:
         return Response(
-            {
-                "error": "Photographer is not available on this date."
-            },
+            {"error": "Photographer is not available on this day."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if session == "morning" and not weekly.morning:
+        return Response(
+            {"error": "Morning session is unavailable."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if session == "afternoon" and not weekly.afternoon:
+        return Response(
+            {"error": "Afternoon session is unavailable."},
             status=status.HTTP_400_BAD_REQUEST
         )
 
     # ------------------------
-    # Check session availability
+    # Check Blacklist (Exceptions)
     # ------------------------
 
-    if session == "morning":
+    blocked = AvailabilityException.objects.filter(
+        photographer=photographer,
+        date=booking_date
+    ).filter(
+        Q(session=session) |
+        Q(session="full_day")
+    ).exists()
 
-        if availability.morning_status != "available":
-            return Response(
-                {
-                    "error": "Morning session is unavailable."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-    elif session == "afternoon":
-
-        if availability.afternoon_status != "available":
-            return Response(
-                {
-                    "error": "Afternoon session is unavailable."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
+    if blocked:
+        return Response(
+            {"error": "Photographer is unavailable on this date."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     # ------------------------
-    # Prevent double booking
+    # Prevent Double Booking
     # ------------------------
 
     booking_exists = Booking.objects.filter(
@@ -534,14 +569,12 @@ def create_booking(request):
 
     if booking_exists:
         return Response(
-            {
-                "error": "This session has already been booked."
-            },
+            {"error": "This session has already been booked."},
             status=status.HTTP_400_BAD_REQUEST
         )
 
     # ------------------------
-    # Prevent multiple active bookings
+    # Prevent Multiple Active Bookings
     # ------------------------
 
     active_booking = Booking.objects.filter(
@@ -672,7 +705,7 @@ def user_notifications(request):
         openapi.Parameter(
             name="location",
             in_=openapi.IN_QUERY,
-            description="Enter photographer location (Example: Kochi)",
+            description="Photographer location (Example: Kochi)",
             type=openapi.TYPE_STRING,
             required=False,
         ),
@@ -680,7 +713,7 @@ def user_notifications(request):
         openapi.Parameter(
             name="date",
             in_=openapi.IN_QUERY,
-            description="Available date (YYYY-MM-DD)",
+            description="Booking date (YYYY-MM-DD)",
             type=openapi.TYPE_STRING,
             format="date",
             required=False,
@@ -718,39 +751,60 @@ def photographer_filter(request):
         user__is_active=True
     )
 
-    # Filter by location
+    # ------------------------
+    # Filter by Location
+    # ------------------------
+
     if location:
         photographers = photographers.filter(
             location__icontains=location
         )
 
-    # Filter by available date
+    # ------------------------
+    # Filter by Date
+    # ------------------------
+
     if booking_date:
 
+        try:
+            booking_date = datetime.strptime(
+                booking_date,
+                "%Y-%m-%d"
+            ).date()
+
+        except ValueError:
+            return Response(
+                {
+                    "error": "Invalid date format. Use YYYY-MM-DD."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        weekday = booking_date.isoweekday()
+
         photographers = photographers.filter(
-
-            Q(
-                availability__date=booking_date,
-                availability__morning_status="available"
-            )
-            |
-            Q(
-                availability__date=booking_date,
-                availability__afternoon_status="available"
-            )
-
+            weekly_availability__weekday=weekday
+        ).exclude(
+            availability_exceptions__date=booking_date,
+            availability_exceptions__session="full_day"
         ).distinct()
 
-    # Sort by experience
+    # ------------------------
+    # Sort by Experience
+    # ------------------------
+
     if experience:
 
         if experience.lower() == "asc":
+
             photographers = photographers.order_by("experience")
 
         elif experience.lower() == "desc":
+
             photographers = photographers.order_by("-experience")
 
         else:
+
             return Response(
                 {
                     "error": "Experience must be 'asc' or 'desc'."

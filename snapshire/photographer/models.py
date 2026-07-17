@@ -48,41 +48,101 @@ class PhotographerProfile(models.Model):
 
     def __str__(self):
         return self.user.username
+    
 
-class Availability(models.Model):
+
+class WeeklyAvailability(models.Model):
+
+    WEEKDAY_CHOICES = [
+        (0, "Monday"),
+        (1, "Tuesday"),
+        (2, "Wednesday"),
+        (3, "Thursday"),
+        (4, "Friday"),
+        (5, "Saturday"),
+        (6, "Sunday"),
+    ]
+
+    STATUS_CHOICES = [
+        ("available", "Available"),
+        ("unavailable", "Unavailable"),
+    ]
 
     photographer = models.ForeignKey(
         PhotographerProfile,
         on_delete=models.CASCADE,
-        related_name="availability"
+        related_name="weekly_availability"
+    )
+
+    weekday = models.IntegerField(
+        choices=WEEKDAY_CHOICES
+    )
+
+    morning = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="unavailable"
+    )
+
+    afternoon = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="unavailable"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    class Meta:
+        unique_together = ("photographer", "weekday")
+        ordering = ["weekday"]
+
+    def __str__(self):
+        return f"{self.photographer.user.username} - {self.get_weekday_display()}"
+
+
+class AvailabilityException(models.Model):
+
+    SESSION_CHOICES = [
+        ("morning", "Morning"),
+        ("afternoon", "Afternoon"),
+        ("full_day", "Full Day"),
+    ]
+
+    photographer = models.ForeignKey(
+        PhotographerProfile,
+        on_delete=models.CASCADE,
+        related_name="availability_exceptions"
     )
 
     date = models.DateField()
 
-    MORNING_CHOICES = [
-        ("available", "Available"),
-        ("unavailable", "Unavailable"),
-    ]
-
-    AFTERNOON_CHOICES = [
-        ("available", "Available"),
-        ("unavailable", "Unavailable"),
-    ]
-
-    morning_status = models.CharField(
+    session = models.CharField(
         max_length=20,
-        choices=MORNING_CHOICES,
-        default="unavailable"
+        choices=SESSION_CHOICES
     )
 
-    afternoon_status = models.CharField(
-        max_length=20,
-        choices=AFTERNOON_CHOICES,
-        default="unavailable"
+    reason = models.CharField(
+        max_length=200,
+        blank=True
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
     )
 
     class Meta:
-        unique_together = ("photographer", "date")
+        unique_together = (
+            "photographer",
+            "date",
+            "session",
+        )
+        ordering = ["date"]
+
+    def __str__(self):
+        return f"{self.photographer.user.username} - {self.date} ({self.session})"
+
 
 
 

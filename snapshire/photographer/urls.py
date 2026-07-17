@@ -10,12 +10,15 @@ urlpatterns = [
     path("profile/update/",views.profile_update,name="photographer_profile_update"),
     path("profile/",views.profile,name="photographer_profile"),
     path("verification/",views.verification,name="photographer_verification"),
-    path("calendar/",views.calendar_view,name="calendar"),
-    path("add-availability/",views.save_availability,name="add-availability"),
-    path("update-availability/<int:id>/",views.update_availability,name="update-availability"),
-    path("delete-availability/<int:id>/",views.delete_availability,name="delete-availability"),
-    path("my-availability/",views.my_availability,name="my-availability"),
-    path("notifications/",views.photographer_notifications,name="photographer_notifications")
+    
+    path("notifications/",views.photographer_notifications,name="photographer_notifications"),
+    path("weekly-availability/", views.create_weekly_availability, name="create_weekly_availability"),
+    path("weekly-availability/view/", views.my_weekly_availability, name="my_weekly_availability"),
+    path("weekly-availability/update/<int:availability_id>/", views.update_weekly_availability, name="update_weekly_availability"),
+    path("weekly-availability/delete/<int:availability_id>/", views.delete_weekly_availability, name="delete_weekly_availability"),
+    path("availability-exception/", views.create_availability_exception, name="create_availability_exception"),
+    path("availability-exception/view/", views.my_availability_exceptions, name="my_availability_exceptions"),
+    path("availability-exception/delete/<int:exception_id>/", views.delete_availability_exception, name="delete_availability_exception")
 
 
 
