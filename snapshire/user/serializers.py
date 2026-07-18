@@ -266,27 +266,29 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
     
 
 class PhotographerViewSerializer(serializers.ModelSerializer):
-
-    username = serializers.CharField(
-        source="user.username",
-        read_only=True
-    )
+    photographer_name = serializers.SerializerMethodField()
 
     class Meta:
         model = PhotographerProfile
         fields = [
             "id",
-            "username",
+            "photographer_name",
             "profile_image",
             "specialty",
+            "experience",
             "location",
             "portfolio_link",
         ]
 
+    def get_photographer_name(self, obj):
+        return f"{obj.user.first_name} {obj.user.last_name}".strip()
+
+    
+
 
 class PhotographerDetailSerializer(serializers.ModelSerializer):
 
-    username = serializers.CharField(source="user.username")
+    photographer_name = serializers.SerializerMethodField()
     email = serializers.EmailField(source="user.email")
 
     booking_policy = serializers.SerializerMethodField()
@@ -295,7 +297,7 @@ class PhotographerDetailSerializer(serializers.ModelSerializer):
         model = PhotographerProfile
         fields = [
             "id",
-            "username",
+            "photographer_name",
             "email",
             "profile_image",
             "specialty",
@@ -305,6 +307,10 @@ class PhotographerDetailSerializer(serializers.ModelSerializer):
             "portfolio_link",
             "booking_policy",
         ]
+
+    def get_photographer_name(self, obj):
+        return f"{obj.user.first_name} {obj.user.last_name}".strip()
+
 
     def get_booking_policy(self, obj):
 

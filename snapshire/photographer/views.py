@@ -18,7 +18,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import WeeklyAvailability, AvailabilityException
 from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer
-
+from datetime import date, timedelta
 
 def check_photographer_verification(request):
 
@@ -274,6 +274,27 @@ def create_weekly_availability(request):
     )
 
 
+# @swagger_auto_schema(
+#     method="get",
+#     responses={200: WeeklyAvailabilitySerializer(many=True)}
+# )
+# @api_view(["GET"])
+# @permission_classes([IsAuthenticated])
+# def my_weekly_availability(request):
+
+#     profile = request.user.photographer_profile
+
+#     availability = WeeklyAvailability.objects.filter(
+#         photographer=profile
+#     ).order_by("weekday")
+    
+
+#     serializer = WeeklyAvailabilitySerializer(
+#         availability,
+#         many=True
+#     )
+
+#     return Response(serializer.data)
 @swagger_auto_schema(
     method="get",
     responses={200: WeeklyAvailabilitySerializer(many=True)}
@@ -288,12 +309,27 @@ def my_weekly_availability(request):
         photographer=profile
     ).order_by("weekday")
 
-    serializer = WeeklyAvailabilitySerializer(
-        availability,
-        many=True
-    )
+    today = date.today()
 
-    return Response(serializer.data)
+    data = []
+
+    for item in availability:
+
+        # Calculate next occurrence of this weekday
+        days_ahead = (item.weekday - today.weekday()) % 7
+
+        next_date = today + timedelta(days=days_ahead)
+
+        data.append({
+            "id": item.id,
+            "weekday": item.weekday,
+            "weekday_name": item.get_weekday_display(),
+            "date": next_date,
+            "morning": item.morning,
+            "afternoon": item.afternoon,
+        })
+
+    return Response(data)
 
 
 
