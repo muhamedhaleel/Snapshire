@@ -13,7 +13,7 @@ from drf_yasg.utils import swagger_auto_schema
 from photographer.models import PhotographerProfile
 from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerFilterSerializer
 from .models import Booking
-from .serializers import BookingSerializer,UserBookingStatusSerializer
+from .serializers import BookingSerializer,UserBookingStatusSerializer,VerifyOTPSerializer
 from decimal import Decimal
 from .models import Notification
 from .serializers import NotificationSerializer
@@ -25,32 +25,94 @@ from drf_yasg import openapi
 from photographer.models import PhotographerProfile,WeeklyAvailability,AvailabilityException
 from datetime import date, timedelta
 from datetime import datetime
+import random
+from django.core.mail import send_mail
+from django.utils import timezone
+
+from .models import EmailOTP
+from django.contrib.auth.models import User
+from django.contrib.auth.hashers import make_password
+from django.utils import timezone
+
+from .models import EmailOTP, UserProfile
 
 
+
+# @swagger_auto_schema(
+#     method="post",
+#     request_body=SignupSerializer,
+#     responses={201: "Signup Successful"}
+# )
+# @api_view(["POST"])
+# @parser_classes([FormParser])
+# def signup(request):
+    
+
+#     serializer = SignupSerializer(data=request.data)
+
+#     if serializer.is_valid():
+#         serializer.save()
+
+#         return Response(
+#             {"message": "Signup Successful"},
+#             status=status.HTTP_201_CREATED
+#         )
+
+#     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @swagger_auto_schema(
     method="post",
     request_body=SignupSerializer,
-    responses={201: "Signup Successful"}
+    responses={200: "OTP Sent Successfully"}
 )
 @api_view(["POST"])
 @parser_classes([FormParser])
 def signup(request):
-    
 
     serializer = SignupSerializer(data=request.data)
 
     if serializer.is_valid():
-        serializer.save()
 
-        return Response(
-            {"message": "Signup Successful"},
-            status=status.HTTP_201_CREATED
+        username = serializer.validated_data["username"].strip()
+        email = serializer.validated_data["email"].strip().lower()
+        password = serializer.validated_data["password"]
+
+        # Generate 6-digit OTP
+        otp = str(random.randint(100000, 999999))
+
+        # Remove previous OTP if exists
+        EmailOTP.objects.filter(email=email).delete()
+
+        # Save new OTP
+        EmailOTP.objects.create(
+            email=email,
+            username=username,
+            password=password,
+            otp=otp,
+            created_at=timezone.now()
         )
 
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # Send OTP Email
+        send_mail(
+            subject="Snapshire Email Verification",
+            message=f"Your OTP is: {otp}\n\nThis OTP is valid for 5 minutes.",
+            from_email=None,
+            recipient_list=[email],
+            fail_silently=False,
+        )
 
+        return Response(
+            {
+                "message": "OTP sent successfully. Please verify your email."
+            },
+            status=status.HTTP_200_OK
+        )
+
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST
+    )
 
 @swagger_auto_schema(
     method="post",
@@ -818,3 +880,78 @@ def photographer_filter(request):
     )
 
     return Response(serializer.data)
+
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=VerifyOTPSerializer
+)
+@api_view(["POST"])
+def verify_otp(request):
+
+    serializer = VerifyOTPSerializer(data=request.data)
+
+    if serializer.is_valid():
+
+        email = serializer.validated_data["email"].lower()
+        otp = serializer.validated_data["otp"]
+
+        try:
+
+            otp_record = EmailOTP.objects.get(email=email)
+
+        except EmailOTP.DoesNotExist:
+
+            return Response(
+                {
+                    "error": "OTP not found."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # OTP expires after 5 minutes
+        if timezone.now() > otp_record.created_at + timedelta(minutes=5):
+
+            otp_record.delete()
+
+            return Response(
+                {
+                    "error": "OTP has expired."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if otp_record.otp != otp:
+
+            return Response(
+                {
+                    "error": "Invalid OTP."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Create User
+        user = User.objects.create(
+
+            username=otp_record.username,
+            email=otp_record.email,
+            password=make_password(otp_record.password)
+
+        )
+
+        UserProfile.objects.create(user=user)
+
+        otp_record.delete()
+
+        return Response(
+            {
+                "message": "Signup Successful"
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST
+    )

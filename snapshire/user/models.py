@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.db import models
 from photographer.models import PhotographerProfile
+from django.utils import timezone
 
 
 class UserProfile(models.Model):
@@ -130,3 +131,21 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.title}"
+
+
+
+
+class EmailOTP(models.Model):
+
+    email = models.EmailField(unique=True)
+
+    username = models.CharField(max_length=150)
+
+    password = models.CharField(max_length=128)
+
+    otp = models.CharField(max_length=6)
+
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return self.email

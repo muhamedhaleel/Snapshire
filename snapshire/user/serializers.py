@@ -14,7 +14,122 @@ from django.contrib.auth.password_validation import validate_password as django_
 
 
 
+# class SignupSerializer(serializers.ModelSerializer):
+#     confirm_password = serializers.CharField(write_only=True)
+
+#     class Meta:
+#         model = User
+#         fields = [
+#             "username",
+#             "email",
+#             "password",
+#             "confirm_password",
+#         ]
+#         extra_kwargs = {
+#             "password": {"write_only": True},
+#         }
+
+#     # -------------------------
+#     # Username Validation
+#     # -------------------------
+#     def validate_username(self, value):
+#         value = value.strip()
+
+#         if len(value) < 3 or len(value) > 30:
+#             raise serializers.ValidationError(
+#                 "Username must be between 3 and 30 characters."
+#             )
+
+#         # Must start with a letter and contain only letters, numbers, underscores
+#         if not re.fullmatch(r"^[A-Za-z][A-Za-z0-9_]*$", value):
+#             raise serializers.ValidationError(
+#                 "Username must start with a letter and can contain only letters, numbers and underscores."
+#             )
+
+#         # Cannot be only numbers
+#         if len(set(value.lower())) == 1:
+#             raise serializers.ValidationError(
+#                 "Username cannot consist of the same repeated character."
+#             )
+
+#         if User.objects.filter(username__iexact=value).exists():
+#             raise serializers.ValidationError(
+#                 "Username already exists."
+#             )
+
+#         return value
+
+#     # -------------------------
+#     # Password Validation
+#     # -------------------------
+#     def validate_password(self, value):
+#         if len(value) < 8:
+#             raise serializers.ValidationError(
+#                 "Password must contain at least 8 characters."
+#             )
+
+#         if len(set(value)) == 1:
+#             raise serializers.ValidationError(
+#                 "Password cannot contain only repeated characters."
+#             )
+
+#         if not re.search(r"[A-Z]", value):
+#             raise serializers.ValidationError(
+#                 "Password must contain at least one uppercase letter."
+#             )
+
+#         if not re.search(r"[a-z]", value):
+#             raise serializers.ValidationError(
+#                 "Password must contain at least one lowercase letter."
+#             )
+
+#         if not re.search(r"[0-9]", value):
+#             raise serializers.ValidationError(
+#                 "Password must contain at least one number."
+#             )
+
+#         if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", value):
+#             raise serializers.ValidationError(
+#                 "Password must contain at least one special character."
+#             )
+
+#         # Django built-in password validation
+#         django_validate_password(value)
+
+#         return value
+
+#     # -------------------------
+#     # Confirm Password
+#     # -------------------------
+#     def validate(self, attrs):
+#         if attrs.get("password") != attrs.get("confirm_password"):
+#             raise serializers.ValidationError(
+#                 {"confirm_password": "Passwords do not match."}
+#             )
+#         return attrs
+
+#     # -------------------------
+#     # Create User
+#     # -------------------------
+#     def create(self, validated_data):
+#         validated_data.pop("confirm_password")
+
+#         user = User.objects.create_user(
+#             username=validated_data["username"].strip(),
+#             email=validated_data["email"].strip().lower(),
+#             password=validated_data["password"],
+#         )
+
+#         UserProfile.objects.create(user=user)
+
+#         return user
+
+
+
+
+
 class SignupSerializer(serializers.ModelSerializer):
+
     confirm_password = serializers.CharField(write_only=True)
 
     class Meta:
@@ -25,6 +140,7 @@ class SignupSerializer(serializers.ModelSerializer):
             "password",
             "confirm_password",
         ]
+
         extra_kwargs = {
             "password": {"write_only": True},
         }
@@ -33,6 +149,7 @@ class SignupSerializer(serializers.ModelSerializer):
     # Username Validation
     # -------------------------
     def validate_username(self, value):
+
         value = value.strip()
 
         if len(value) < 3 or len(value) > 30:
@@ -40,13 +157,11 @@ class SignupSerializer(serializers.ModelSerializer):
                 "Username must be between 3 and 30 characters."
             )
 
-        # Must start with a letter and contain only letters, numbers, underscores
         if not re.fullmatch(r"^[A-Za-z][A-Za-z0-9_]*$", value):
             raise serializers.ValidationError(
                 "Username must start with a letter and can contain only letters, numbers and underscores."
             )
 
-        # Cannot be only numbers
         if len(set(value.lower())) == 1:
             raise serializers.ValidationError(
                 "Username cannot consist of the same repeated character."
@@ -60,9 +175,24 @@ class SignupSerializer(serializers.ModelSerializer):
         return value
 
     # -------------------------
+    # Email Validation
+    # -------------------------
+    def validate_email(self, value):
+
+        value = value.strip().lower()
+
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError(
+                "Email already exists."
+            )
+
+        return value
+
+    # -------------------------
     # Password Validation
     # -------------------------
     def validate_password(self, value):
+
         if len(value) < 8:
             raise serializers.ValidationError(
                 "Password must contain at least 8 characters."
@@ -93,7 +223,6 @@ class SignupSerializer(serializers.ModelSerializer):
                 "Password must contain at least one special character."
             )
 
-        # Django built-in password validation
         django_validate_password(value)
 
         return value
@@ -102,16 +231,21 @@ class SignupSerializer(serializers.ModelSerializer):
     # Confirm Password
     # -------------------------
     def validate(self, attrs):
-        if attrs.get("password") != attrs.get("confirm_password"):
+
+        if attrs["password"] != attrs["confirm_password"]:
             raise serializers.ValidationError(
-                {"confirm_password": "Passwords do not match."}
+                {
+                    "confirm_password": "Passwords do not match."
+                }
             )
+
         return attrs
 
     # -------------------------
     # Create User
     # -------------------------
     def create(self, validated_data):
+
         validated_data.pop("confirm_password")
 
         user = User.objects.create_user(
@@ -122,9 +256,7 @@ class SignupSerializer(serializers.ModelSerializer):
 
         UserProfile.objects.create(user=user)
 
-        return user
-
-    
+        return user   
 class LoginSerializer(serializers.Serializer):
 
     username = serializers.CharField()
@@ -390,5 +522,12 @@ class PhotographerFilterSerializer(serializers.ModelSerializer):
             "location",
             "plan_mode",
         ]
+
+
+class VerifyOTPSerializer(serializers.Serializer):
+
+    email = serializers.EmailField()
+
+    otp = serializers.CharField(max_length=6)
 
 

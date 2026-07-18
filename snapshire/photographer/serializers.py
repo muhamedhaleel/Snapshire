@@ -58,17 +58,7 @@ class SignupSerializer(serializers.ModelSerializer):
 
         validated_data.pop("confirm_password")
 
-        user = User.objects.create_user(
-            username=validated_data["username"],
-            email=validated_data["email"],
-            password=validated_data["password"],
-        )
-
-        PhotographerProfile.objects.create(
-            user=user
-        )
-
-        return user
+        return validated_data
     
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
@@ -344,4 +334,12 @@ class AvailabilityExceptionSerializer(serializers.ModelSerializer):
             )
 
         return value
+
+
+
+class  PhotographerVerifyOTPSerializer(serializers.Serializer):
+
+    email = serializers.EmailField()
+
+    otp = serializers.CharField(max_length=6)
 

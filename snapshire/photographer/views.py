@@ -16,9 +16,25 @@ from user.models import Notification
 from user.serializers import NotificationSerializer
 from rest_framework.response import Response
 from rest_framework import status
-from .models import WeeklyAvailability, AvailabilityException
+from .models import WeeklyAvailability, AvailabilityException,PhotographerProfile
 from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer
 from datetime import date, timedelta
+import random
+from .serializers import  PhotographerVerifyOTPSerializer
+
+from django.core.mail import send_mail
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import FormParser
+from rest_framework.response import Response
+from user.models import EmailOTP
+from .serializers import SignupSerializer
+from django.contrib.auth.hashers import make_password
+from django.utils import timezone
+from django.contrib.auth.models import User
+
+
 
 def check_photographer_verification(request):
 
@@ -34,6 +50,33 @@ def check_photographer_verification(request):
 
     return None
 
+# @swagger_auto_schema(
+#     method="post",
+#     request_body=SignupSerializer,
+#     responses={201: "Signup Successful"}
+# )
+# @api_view(["POST"])
+# @parser_classes([FormParser])
+# def signup(request):
+
+#     serializer = SignupSerializer(data=request.data)
+
+#     if serializer.is_valid():
+
+#         serializer.save()
+
+#         return Response(
+#             {
+#                 "message": "Photographer registered successfully."
+#             },
+#             status=status.HTTP_201_CREATED
+#         )
+
+#     return Response(
+#         serializer.errors,
+#         status=status.HTTP_400_BAD_REQUEST
+#     )
+
 @swagger_auto_schema(
     method="post",
     request_body=SignupSerializer,
@@ -47,19 +90,41 @@ def signup(request):
 
     if serializer.is_valid():
 
-        serializer.save()
+        username = serializer.validated_data["username"]
+        email = serializer.validated_data["email"].lower()
+        password = serializer.validated_data["password"]
+
+        otp = str(random.randint(100000, 999999))
+
+        EmailOTP.objects.filter(email=email).delete()
+
+        EmailOTP.objects.create(
+            username=username,
+            email=email,
+            password=password,
+            otp=otp,
+            created_at=timezone.now()
+        )
+
+        send_mail(
+            "Snapshire OTP Verification",
+            f"Your OTP is {otp}",
+            None,
+            [email],
+        )
 
         return Response(
             {
-                "message": "Photographer registered successfully."
+                "message": "OTP sent successfully."
             },
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_200_OK
         )
 
     return Response(
         serializer.errors,
         status=status.HTTP_400_BAD_REQUEST
     )
+
 @swagger_auto_schema(
     method="post",
     request_body=LoginSerializer,
@@ -514,7 +579,7 @@ def my_availability_exceptions(request):
 @permission_classes([IsAuthenticated])
 def delete_availability_exception(request, exception_id):
 
-    profile = request.user.photographer_profile
+    profile = request.User.photographer_profile
 
     try:
 
@@ -538,4 +603,89 @@ def delete_availability_exception(request, exception_id):
         {
             "message": "Exception deleted successfully."
         }
+    )
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body= PhotographerVerifyOTPSerializer
+)
+@api_view(["POST"])
+@parser_classes([FormParser])
+def verify_otp(request):
+
+    serializer = PhotographerVerifyOTPSerializer(data=request.data)
+
+    if serializer.is_valid():
+
+        email = serializer.validated_data["email"].lower()
+        otp = serializer.validated_data["otp"]
+
+        try:
+            otp_record = EmailOTP.objects.get(email=email)
+
+        except EmailOTP.DoesNotExist:
+
+            return Response(
+                {
+                    "error": "OTP not found."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # OTP expires after 5 minutes
+        if timezone.now() > otp_record.created_at + timedelta(minutes=5):
+
+            otp_record.delete()
+
+            return Response(
+                {
+                    "error": "OTP expired."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check OTP
+        if otp_record.otp != otp:
+
+            return Response(
+                {
+                    "error": "Invalid OTP."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Create User
+        user = User.objects.create_user(
+
+            username=otp_record.username,
+
+            email=otp_record.email,
+
+            password=otp_record.password
+
+)
+
+            
+
+     
+
+        # Create Photographer Profile
+        PhotographerProfile.objects.create(
+            user=user
+        )
+
+        # Delete OTP record
+        otp_record.delete()
+
+        return Response(
+            {
+                "message": "Photographer registered successfully."
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST
     )

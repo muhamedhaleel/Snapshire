@@ -18,7 +18,12 @@ urlpatterns = [
     path("weekly-availability/delete/<int:availability_id>/", views.delete_weekly_availability, name="delete_weekly_availability"),
     path("availability-exception/", views.create_availability_exception, name="create_availability_exception"),
     path("availability-exception/view/", views.my_availability_exceptions, name="my_availability_exceptions"),
-    path("availability-exception/delete/<int:exception_id>/", views.delete_availability_exception, name="delete_availability_exception")
+    path("availability-exception/delete/<int:exception_id>/", views.delete_availability_exception, name="delete_availability_exception"),
+    path(
+    "verify-otp/",
+    views.verify_otp,
+    name="verify_otp",
+), 
 
 
 
