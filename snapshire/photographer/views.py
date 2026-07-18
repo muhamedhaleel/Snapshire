@@ -224,6 +224,9 @@ def profile(request):
 @permission_classes([IsAuthenticated])
 @parser_classes([FormParser])
 def verification(request):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     serializer = VerificationSerializer(data=request.data)
 
@@ -367,6 +370,9 @@ def create_weekly_availability(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_weekly_availability(request):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     profile = request.user.photographer_profile
 
@@ -473,6 +479,9 @@ def update_weekly_availability(request, availability_id):
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_weekly_availability(request, availability_id):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     profile = request.user.photographer_profile
 
@@ -508,6 +517,9 @@ def delete_weekly_availability(request, availability_id):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_availability_exception(request):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     profile = request.user.photographer_profile
 
@@ -578,8 +590,13 @@ def my_availability_exceptions(request):
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_availability_exception(request, exception_id):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
-    profile = request.User.photographer_profile
+    
+
+    profile = request.user.photographer_profile
 
     try:
 
