@@ -170,3 +170,6 @@ EMAIL_HOST_USER = "muhameedhaleel11@gmail.com"
 EMAIL_HOST_PASSWORD = "aidulmetooinaybp"
 
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+
+

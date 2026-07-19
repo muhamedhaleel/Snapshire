@@ -280,7 +280,7 @@ def photographer_availability(request, photographer_id):
 
     while current <= end_date:
 
-        weekday = current.isoweekday()
+        weekday = current.weekday()
 
         weekly = WeeklyAvailability.objects.filter(
             photographer=photographer,
@@ -541,6 +541,7 @@ def photographer_availability(request, photographer_id):
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
 def create_booking(request):
 
     serializer = BookingSerializer(data=request.data)
@@ -569,7 +570,7 @@ def create_booking(request):
     # Check Weekly Availability
     # ------------------------
 
-    weekday = booking_date.isoweekday()
+    weekday = booking_date.weekday()
 
     weekly = WeeklyAvailability.objects.filter(
         photographer=photographer,
@@ -842,7 +843,7 @@ def photographer_filter(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        weekday = booking_date.isoweekday()
+        weekday = booking_date.weekday()
 
         photographers = photographers.filter(
             weekly_availability__weekday=weekday
