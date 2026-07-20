@@ -1,6 +1,6 @@
 # SnapsHire Project
 
-A REST API backend for **SnapsHire**, a photographer booking platform built with **Python, Django, and Django REST Framework**.
+A REST API backend for **SnapsHire**, a photographer booking platform 
 
 Features
 
@@ -43,7 +43,7 @@ Tech Stack
 
 ---
 
-roject Structure
+project Structure
 
 ```
 SnapsHire/
