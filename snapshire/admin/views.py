@@ -11,6 +11,8 @@ from drf_yasg.utils import swagger_auto_schema
 
 from user.models import UserProfile,Booking
 from photographer.models import PhotographerProfile
+from .serializers import PendingPhotographerSerializer
+from django.db.models import Q
 
 from .serializers import (
     AdminLoginSerializer,
@@ -288,4 +290,56 @@ def admin_booking_management(request):
 
     return Response(serializer.data)
 
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def pending_photographers(request):
 
+    photographers = PhotographerProfile.objects.filter(
+        verification_status="Pending"
+    ).order_by("-created_at")
+
+    serializer = PendingPhotographerSerializer(
+        photographers,
+        many=True
+    )
+
+    return Response(serializer.data)
+
+
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
+
+@swagger_auto_schema(
+    method="get",
+    manual_parameters=[
+        openapi.Parameter(
+            "search",
+            openapi.IN_QUERY,
+            description="Search photographer by first name or last name",
+            type=openapi.TYPE_STRING,
+            required=True,
+        )
+    ],
+    responses={200: PhotographerListSerializer(many=True)}
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def search_photographers(request):
+
+    search = request.GET.get("search", "").strip()
+
+    if not search:
+        return Response([])
+
+    photographers = PhotographerProfile.objects.filter(
+        Q(user__first_name__icontains=search) |
+        Q(user__last_name__icontains=search)
+    )
+
+    serializer = PhotographerListSerializer(
+        photographers,
+        many=True
+    )
+
+    return Response(serializer.data)
