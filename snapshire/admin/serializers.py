@@ -78,6 +78,7 @@ class PhotographerListSerializer(serializers.ModelSerializer):
 
     id = serializers.IntegerField(source="user.id")
     username = serializers.CharField(source="user.username")
+    photographer_name = serializers.SerializerMethodField()
     email = serializers.EmailField(source="user.email")
 
     status = serializers.SerializerMethodField()
@@ -87,6 +88,7 @@ class PhotographerListSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "username",
+            "photographer_name",
             "email",
             "phone",
             "specialty",
@@ -104,6 +106,15 @@ class PhotographerListSerializer(serializers.ModelSerializer):
             return "Active"
 
         return "Blocked"
+    
+    def get_photographer_name(self, obj):
+
+        first_name = obj.user.first_name.strip()
+        last_name = obj.user.last_name.strip()
+
+        full_name = f"{first_name} {last_name}".strip()
+
+        return full_name if full_name else "Not added"
     
 
 
@@ -135,3 +146,28 @@ class AdminBookingManagementSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
         ]
+
+
+
+class PendingPhotographerSerializer(serializers.ModelSerializer):
+
+    username = serializers.CharField(source="user.username")
+
+    email = serializers.EmailField(source="user.email")
+
+    class Meta:
+        model = PhotographerProfile
+        fields = [
+            "id",
+            "username",
+            "email",
+            "profile_image",
+            "specialty",
+            "experience",
+            "location",
+            "verification_status",
+            "created_at",
+        ]
+
+
+
