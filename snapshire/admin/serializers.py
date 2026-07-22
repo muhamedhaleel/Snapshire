@@ -150,6 +150,7 @@ class AdminBookingManagementSerializer(serializers.ModelSerializer):
 
 
 class PendingPhotographerSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(source="user.id")
 
     username = serializers.CharField(source="user.username")
 
