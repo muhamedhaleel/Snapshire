@@ -259,6 +259,7 @@ def verify_photographer(request, photographer_id):
 
     return Response(
         
+        
        {
         "message": f"Photographer '{profile.user.username}' has been verified successfully.",
         "username": profile.user.username,
