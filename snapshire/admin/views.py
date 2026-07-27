@@ -257,7 +257,7 @@ def verify_photographer(request, photographer_id):
     profile.verification_status = "Approved"
     profile.save()
 
-    return Response(
+    return Response( 
         
        {
         "message": f"Photographer '{profile.user.username}' has been verified successfully.",
@@ -267,7 +267,7 @@ def verify_photographer(request, photographer_id):
     },
     status=status.HTTP_200_OK,
 )
-
+   
 
 @swagger_auto_schema(
     method="get",

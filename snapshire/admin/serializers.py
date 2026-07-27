@@ -153,6 +153,7 @@ class PendingPhotographerSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source="user.id")
 
     username = serializers.CharField(source="user.username")
+    photographer_name = serializers.SerializerMethodField()
 
     email = serializers.EmailField(source="user.email")
 
@@ -161,6 +162,7 @@ class PendingPhotographerSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "username",
+            "photographer_name",
             "email",
             "profile_image",
             "specialty",
@@ -169,6 +171,18 @@ class PendingPhotographerSerializer(serializers.ModelSerializer):
             "verification_status",
             "created_at",
         ]
+
+
+
+
+    def get_photographer_name(self, obj):
+    
+            first_name = obj.user.first_name.strip()
+            last_name = obj.user.last_name.strip()
+    
+            full_name = f"{first_name} {last_name}".strip()
+    
+            return full_name if full_name else "Not added"
 
 
 
