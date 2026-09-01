@@ -96,7 +96,13 @@ def signup(request):
         # Send OTP Email
         send_mail(
             subject="Snapshire Email Verification",
-            message=f"Your OTP is: {otp}\n\nThis OTP is valid for 5 minutes.",
+            message=f"""
+            
+            Hellow,
+            Here is your OTP for Snapshire signup:{otp}
+            This OTP is valid for 5 minutes.
+            Continue with Snapshire for the best photography experience!
+            """,
             from_email=None,
             recipient_list=[email],
             fail_silently=False,
@@ -163,7 +169,16 @@ def profile_update(request):
 
     if serializer.is_valid():
         serializer.save()
+        # Create notification
+        Notification.objects.create(
+            user=request.user,
+            title="Profile Updated",
+            message="Your profile has been updated successfully."
+        )
+
         return Response(serializer.data)
+
+    
 
     return Response(serializer.errors, status=400)
 
@@ -663,22 +678,7 @@ def create_booking(request):
     # Price Calculation
     # ------------------------
 
-    try:
-        experience = int(photographer.experience)
-    except ValueError:
-        experience = 1
-
-    hourly_rate = experience * 200
-
-    hours = serializer.validated_data["hours"]
-
-    platform_fee = Decimal("15.00")
-
-    total_amount = Decimal(hourly_rate * hours) + platform_fee
-
-    advance_amount = total_amount * Decimal("0.50")
-
-    balance_amount = total_amount - advance_amount
+    
 
     # ------------------------
     # Create Booking
@@ -692,12 +692,9 @@ def create_booking(request):
         session=session,
         location=serializer.validated_data["location"],
         shoot_time=serializer.validated_data["shoot_time"],
-        hours=hours,
+        hours=serializer.validated_data["hours"],
         requirements=serializer.validated_data["requirements"],
-        total_amount=total_amount,
-        advance_amount=advance_amount,
-        balance_amount=balance_amount,
-        status="payment_pending"
+
 
     )
 
@@ -708,10 +705,8 @@ def create_booking(request):
             "photographer": photographer.user.username,
             "date": booking.date,
             "session": booking.session,
+            "hours": booking.hours,
             "location": booking.location,
-            "total_amount": booking.total_amount,
-            "advance_amount": booking.advance_amount,
-            "balance_amount": booking.balance_amount,
             "status": booking.status
         },
         status=status.HTTP_201_CREATED
@@ -955,4 +950,51 @@ def verify_otp(request):
     return Response(
         serializer.errors,
         status=status.HTTP_400_BAD_REQUEST
+    )
+
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def cancel_booking(request, booking_id):
+
+    try:
+        booking = Booking.objects.get(
+            id=booking_id,
+            user=request.user
+        )
+
+    except Booking.DoesNotExist:
+        return Response(
+            {
+                "success": False,
+                "message": "Booking not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Cancellation allowed only before payment
+    if booking.status != "payment_pending":
+        return Response(
+            {
+                "success": False,
+                "message": "Booking cannot be cancelled at this stage."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    booking.status = "cancelled"
+    booking.save(update_fields=["status"])
+
+    return Response(
+        {
+            "success": True,
+            "message": "Booking cancelled successfully."
+        },
+        status=status.HTTP_200_OK
     )

@@ -304,6 +304,7 @@ def photographer_notifications(request):
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
 def create_weekly_availability(request):
 
     profile = request.user.photographer_profile
@@ -413,6 +414,7 @@ def my_weekly_availability(request):
 )
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
 def update_weekly_availability(request, availability_id):
 
     profile = request.user.photographer_profile
@@ -518,6 +520,7 @@ def delete_weekly_availability(request, availability_id):
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
 def create_availability_exception(request):
     response = check_photographer_verification(request)
     if response:

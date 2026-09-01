@@ -13,6 +13,8 @@ from user.models import UserProfile,Booking
 from photographer.models import PhotographerProfile
 from .serializers import PendingPhotographerSerializer
 from django.db.models import Q
+from rest_framework.pagination import PageNumberPagination
+from drf_yasg import openapi
 
 from .serializers import (
     AdminLoginSerializer,
@@ -63,18 +65,31 @@ def admin_login(request):
 
 @swagger_auto_schema(
     method="get",
-    responses={200: UserListSerializer(many=True)},
+    manual_parameters=[
+        openapi.Parameter(
+            "page",
+            openapi.IN_QUERY,
+            description="Page number",
+            type=openapi.TYPE_INTEGER,
+            required=False,
+        ),
+    ]
 )
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def user_list(request):
 
-    users = UserProfile.objects.select_related("user")
+    users = UserProfile.objects.select_related("user").order_by("-created_at")
+    paginator = PageNumberPagination()
+    paginator.page_size = 1
+    result_page = paginator.paginate_queryset(
+        users,
+        request
+    )
 
-    serializer = UserListSerializer(users, many=True)
+    serializer = UserListSerializer(result_page, many=True)
 
-    return Response(serializer.data)
-
+    return paginator.get_paginated_response(serializer.data)
 
 # ===========================
 # Block User
@@ -147,22 +162,75 @@ def unblock_user(request, user_id):
 # Photographer List
 # ===========================
 
+# @swagger_auto_schema(
+#     method="get",
+#     responses={200: PhotographerListSerializer(many=True)},
+# )
+# @api_view(["GET"])
+# @permission_classes([IsAdminUser])
+# def photographer_list(request):
+
+#     photographers = PhotographerProfile.objects.select_related("user")
+#     paginator = PageNumberPagination()
+#     paginator.page_size = 2
+
+
+#     result_page = paginator.paginate_queryset(
+#         photographers,
+#         request
+#     )
+
+#     serializer = PhotographerListSerializer(
+#         photographers,
+#         many=True,
+#     )
+
+#     return paginator.get_paginated_response(
+#         serializer.data
+#     )
+
 @swagger_auto_schema(
     method="get",
-    responses={200: PhotographerListSerializer(many=True)},
+    manual_parameters=[
+        openapi.Parameter(
+            "page",
+            openapi.IN_QUERY,
+            description="Page number",
+            type=openapi.TYPE_INTEGER,
+            required=False,
+        ),
+        # openapi.Parameter(
+        #     "page_size",
+        #     openapi.IN_QUERY,
+        #     description="Number of photographers per page",
+        #     type=openapi.TYPE_INTEGER,
+        #     required=False,
+        # ),
+    ],
 )
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def photographer_list(request):
 
-    photographers = PhotographerProfile.objects.select_related("user")
+    photographers = PhotographerProfile.objects.select_related(
+        "user"
+    ).order_by("-created_at")
 
-    serializer = PhotographerListSerializer(
+    paginator = PageNumberPagination()
+    paginator.page_size = 3
+    result_page = paginator.paginate_queryset(
         photographers,
-        many=True,
+        request
     )
 
-    return Response(serializer.data)
+    serializer = PhotographerListSerializer(
+        result_page,
+        many=True
+    )
+
+    return paginator.get_paginated_response(
+        serializer.data
+    )
 
 
 # ===========================
@@ -271,7 +339,16 @@ def verify_photographer(request, photographer_id):
 
 @swagger_auto_schema(
     method="get",
-    responses={200: AdminBookingManagementSerializer(many=True)}
+    manual_parameters=[
+        openapi.Parameter(
+            "page",
+            openapi.IN_QUERY,
+            description="Page number",
+            type=openapi.TYPE_INTEGER,
+            required=False,
+        ),
+    ],
+    
 )
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
@@ -283,12 +360,21 @@ def admin_booking_management(request):
         "photographer__user"
     ).order_by("-created_at")
 
-    serializer = AdminBookingManagementSerializer(
+    paginator = PageNumberPagination()
+    paginator.page_size = 3
+    result_page = paginator.paginate_queryset(
         bookings,
+        request
+    )
+
+    serializer = AdminBookingManagementSerializer(
+        result_page,
         many=True
     )
 
-    return Response(serializer.data)
+    return paginator.get_paginated_response(
+        serializer.data
+    )
 
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
@@ -339,6 +425,48 @@ def search_photographers(request):
 
     serializer = PhotographerListSerializer(
         photographers,
+        many=True
+    )
+
+    return Response(serializer.data)
+
+
+
+@swagger_auto_schema(
+    method="get",
+    manual_parameters=[
+        openapi.Parameter(
+            "search",
+            openapi.IN_QUERY,
+            description="Search user by username or name",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def search_users(request):
+
+    search = request.GET.get("search", "").strip()
+
+    if not search:
+        return Response(
+            {
+                "error": "Please enter a username or name."
+            },
+            status=400
+        )
+
+    users = UserProfile.objects.select_related(
+        "user"
+    ).filter(
+        Q(user__first_name__icontains=search) |
+        Q(user__last_name__icontains=search)
+    )
+
+    serializer = UserListSerializer(
+        users,
         many=True
     )
 

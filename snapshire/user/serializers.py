@@ -410,6 +410,8 @@ class PhotographerViewSerializer(serializers.ModelSerializer):
             "experience",
             "location",
             "portfolio_link",
+            
+
         ]
 
     def get_photographer_name(self, obj):
@@ -438,6 +440,7 @@ class PhotographerDetailSerializer(serializers.ModelSerializer):
             "bio",
             "portfolio_link",
             "booking_policy",
+            
         ]
 
     def get_photographer_name(self, obj):

@@ -20,7 +20,12 @@ urlpatterns = [
         name="user-booking-status"),
     path("notifications/",views.user_notifications,name="user_notifications"),
     path("photographers/filter/",views.photographer_filter,name="photographer-filter"),
-    path("verify-otp/",views.verify_otp,name="verify_otp")
+    path("verify-otp/",views.verify_otp,name="verify_otp"),
+    path(
+    "bookings/<int:booking_id>/cancel/",
+    views.cancel_booking,
+    name="cancel-booking"
+),
 
     
      
