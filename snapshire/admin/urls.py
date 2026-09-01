@@ -51,7 +51,7 @@ urlpatterns = [
     name="admin-booking-management",
     ),
     path(
-    "photographers/pending/",
+    "photographers/verification-pending/",
     views.pending_photographers,
     name="pending-photographers",
     ),
@@ -59,6 +59,11 @@ urlpatterns = [
     "photographers/search/",
     views.search_photographers,
     name="search-photographers",
+),
+    path(
+    "users/search/",
+    views.search_users,
+    name="search-users"
 ),
 
     
