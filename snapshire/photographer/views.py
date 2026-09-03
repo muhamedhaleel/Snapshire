@@ -16,11 +16,11 @@ from user.models import Notification
 from user.serializers import NotificationSerializer
 from rest_framework.response import Response
 from rest_framework import status
-from .models import WeeklyAvailability, AvailabilityException,PhotographerProfile
+from .models import WeeklyAvailability, AvailabilityException,PhotographerProfile,PhotographerCharge
 from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer
 from datetime import date, timedelta
 import random
-from .serializers import  PhotographerVerifyOTPSerializer
+from .serializers import  PhotographerVerifyOTPSerializer,PhotographerChargeSerializer
 
 from django.core.mail import send_mail
 from django.utils import timezone
@@ -709,5 +709,74 @@ def verify_otp(request):
 
     return Response(
         serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST
+    )
+
+
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=PhotographerChargeSerializer
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
+def create_photographer_charge(request):
+
+    try:
+        photographer = PhotographerProfile.objects.get(
+            user=request.user
+        )
+    except PhotographerProfile.DoesNotExist:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Photographer profile not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    serializer = PhotographerChargeSerializer(
+        data=request.data
+    )
+
+    if serializer.is_valid():
+
+        hours = serializer.validated_data["hours"]
+
+        # Check whether this duration already exists
+        if PhotographerCharge.objects.filter(
+            photographer=photographer,
+            hours=hours
+        ).exists():
+
+            return Response(
+                {
+                    "success": False,
+                    "message": f"Charge for {hours} hour(s) already exists."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer.save(
+            photographer=photographer
+        )
+
+        return Response(
+            {
+                "success": True,
+                "message": "Photographer charge added successfully.",
+                "data": serializer.data
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+    return Response(
+        {
+            "success": False,
+            "errors": serializer.errors
+        },
         status=status.HTTP_400_BAD_REQUEST
     )

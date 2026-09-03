@@ -16,7 +16,7 @@ from .models import Booking
 from .serializers import BookingSerializer,UserBookingStatusSerializer,VerifyOTPSerializer
 from decimal import Decimal
 from .models import Notification
-from .serializers import NotificationSerializer
+from .serializers import NotificationSerializer,ForgotPasswordSerializer,ResetPasswordSerializer
 from django.db.models import Q
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -34,7 +34,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 
-from .models import EmailOTP, UserProfile
+from .models import EmailOTP, UserProfile, PasswordResetOTP
 
 
 
@@ -997,4 +997,164 @@ def cancel_booking(request, booking_id):
             "message": "Booking cancelled successfully."
         },
         status=status.HTTP_200_OK
+    )
+
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=ForgotPasswordSerializer
+)
+@api_view(["POST"])
+@parser_classes([FormParser])
+def forgot_password(request):
+
+    serializer = ForgotPasswordSerializer(data=request.data)
+
+    if serializer.is_valid():
+
+        email = serializer.validated_data["email"].strip().lower()
+
+        # Check whether user exists
+        try:
+            User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {
+                    "error": "No account found with this email."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Generate OTP
+        otp = str(random.randint(100000, 999999))
+
+        # Remove old OTP
+        PasswordResetOTP.objects.filter(
+            email=email
+        ).delete()
+
+        # Save new OTP
+        PasswordResetOTP.objects.create(
+            email=email,
+            otp=otp,
+            created_at=timezone.now()
+        )
+
+        # Send OTP
+        send_mail(
+            subject="Snapshire - Password Reset",
+            message=f"""
+Hello,
+
+We received a request to reset your Snapshire account password.
+
+Your verification code is: {otp}
+
+This code is valid for 5 minutes. Please do not share this code with anyone.
+
+If you did not request a password reset, you may safely disregard this email.
+
+Regards,
+Snapshire Team
+Photography Booking Platform
+""",
+            from_email=None,
+            recipient_list=[email],
+            fail_silently=False,
+        )
+
+        return Response(
+            {
+                "message": "OTP sent successfully. Please check your email."
+            },
+            status=status.HTTP_200_OK
+        )
+
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST
+    )
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=ResetPasswordSerializer
+)
+@api_view(["POST"])
+@parser_classes([FormParser])
+def reset_password(request):
+
+    serializer = ResetPasswordSerializer(data=request.data)
+
+    if serializer.is_valid():
+
+        email = serializer.validated_data["email"].strip().lower()
+        otp = serializer.validated_data["otp"]
+        new_password = serializer.validated_data["new_password"]
+
+        try:
+            otp_record = PasswordResetOTP.objects.get(
+                email=email
+            )
+        except PasswordResetOTP.DoesNotExist:
+
+            return Response(
+                {
+                    "error": "OTP not found."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check OTP expiry
+        if timezone.now() > otp_record.created_at + timedelta(minutes=5):
+
+            otp_record.delete()
+
+            return Response(
+                {
+                    "error": "OTP has expired."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check OTP
+        if otp_record.otp != otp:
+
+            return Response(
+                {
+                    "error": "Invalid OTP."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Find user
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+
+            return Response(
+                {
+                    "error": "User not found."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Update password
+        user.password = make_password(new_password)
+        user.save()
+
+        # Delete OTP after successful reset
+        otp_record.delete()
+
+        return Response(
+            {
+                "message": "Password reset successful."
+            },
+            status=status.HTTP_200_OK
+        )
+
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST
     )

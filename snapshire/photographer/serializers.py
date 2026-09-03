@@ -3,7 +3,7 @@ from rest_framework import serializers
 from .models import PhotographerProfile
 from django.contrib.auth import authenticate
 from user.models import Notification
-from.models import WeeklyAvailability,AvailabilityException
+from.models import WeeklyAvailability,AvailabilityException,PhotographerCharge
 import re
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password as django_validate_password
@@ -453,4 +453,41 @@ class  PhotographerVerifyOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
     otp = serializers.CharField(max_length=6)
+
+
+
+class PhotographerChargeSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = PhotographerCharge
+        fields = [
+            "id",
+            "hours",
+            "amount",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate_hours(self, value):
+
+        if value not in [1, 2, 3, 4]:
+            raise serializers.ValidationError(
+                "Hours must be 1, 2, 3, or 4."
+            )
+
+        return value
+
+    def validate_amount(self, value):
+
+        if value <= 0:
+            raise serializers.ValidationError(
+                "Amount must be greater than 0."
+            )
+
+        return value
 

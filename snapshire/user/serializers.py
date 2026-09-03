@@ -2,10 +2,12 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 from .models import UserProfile 
 from photographer.models import PhotographerProfile
+from photographer.serializers import PhotographerChargeSerializer
 from django.contrib.auth import authenticate
 from .models import Booking
 from rest_framework import serializers
 from .models import Notification
+from photographer.models import PhotographerCharge
 import re
 from django.contrib.auth.password_validation import validate_password
 import re
@@ -304,6 +306,18 @@ class LoginSerializer(serializers.Serializer):
 
         return attrs
 
+class UserPhotographerChargeSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = PhotographerCharge
+        fields=[
+            "hours",
+            "amount",
+
+        ]
+        
+
+
 class UpdateProfileSerializer(serializers.ModelSerializer):
 
     username = serializers.CharField(required=False)
@@ -399,6 +413,10 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
 
 class PhotographerViewSerializer(serializers.ModelSerializer):
     photographer_name = serializers.SerializerMethodField()
+    charges = UserPhotographerChargeSerializer(
+        many=True,
+        read_only=True
+    )
 
     class Meta:
         model = PhotographerProfile
@@ -410,7 +428,7 @@ class PhotographerViewSerializer(serializers.ModelSerializer):
             "experience",
             "location",
             "portfolio_link",
-            
+            "charges"
 
         ]
 
@@ -424,6 +442,10 @@ class PhotographerDetailSerializer(serializers.ModelSerializer):
 
     photographer_name = serializers.SerializerMethodField()
     email = serializers.EmailField(source="user.email")
+    charges = UserPhotographerChargeSerializer(
+        many=True,
+        read_only=True
+    )
 
     booking_policy = serializers.SerializerMethodField()
 
@@ -439,6 +461,7 @@ class PhotographerDetailSerializer(serializers.ModelSerializer):
             "location",
             "bio",
             "portfolio_link",
+            "charges",
             "booking_policy",
             
         ]
@@ -532,5 +555,18 @@ class VerifyOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
     otp = serializers.CharField(max_length=6)
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(max_length=6)
+    new_password = serializers.CharField(
+        max_length=128,
+        write_only=True
+    )
 
 

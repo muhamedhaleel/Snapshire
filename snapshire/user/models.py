@@ -137,3 +137,12 @@ class EmailOTP(models.Model):
 
     def __str__(self):
         return self.email
+
+
+class PasswordResetOTP(models.Model):
+    email = models.EmailField(unique=True)
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return self.email
