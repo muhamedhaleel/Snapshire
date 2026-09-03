@@ -5,7 +5,7 @@ from rest_framework import serializers
 from user.models import UserProfile
 from photographer.models import PhotographerProfile
 from user.models import Booking
-
+from .models import PlatformFee
 
 class AdminLoginSerializer(serializers.Serializer):
 
@@ -183,6 +183,11 @@ class PendingPhotographerSerializer(serializers.ModelSerializer):
             full_name = f"{first_name} {last_name}".strip()
     
             return full_name if full_name else "Not added"
+
+class PlatformFeeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlatformFee
+        fields = ["amount"]
 
 
 

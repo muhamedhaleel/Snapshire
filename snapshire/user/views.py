@@ -22,7 +22,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from drf_yasg import openapi
-from photographer.models import PhotographerProfile,WeeklyAvailability,AvailabilityException
+from photographer.models import PhotographerProfile,WeeklyAvailability,AvailabilityException,PhotographerCharge
 from datetime import date, timedelta
 from datetime import datetime
 import random
@@ -35,6 +35,9 @@ from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 
 from .models import EmailOTP, UserProfile, PasswordResetOTP
+from decimal import Decimal
+from admin.models import PlatformFee
+
 
 
 
@@ -681,6 +684,63 @@ def create_booking(request):
     
 
     # ------------------------
+    # Price Calculation
+    # ------------------------
+
+    hours = serializer.validated_data["hours"]
+
+    try:
+        charge = PhotographerCharge.objects.get(
+            photographer=photographer,
+            hours=hours
+        )
+    except PhotographerCharge.DoesNotExist:
+        return Response(
+            {
+                "error": (
+                    f"Price for {hours} hour(s) "
+                    "is not available for this photographer."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Photographer's charge for selected hours
+    photographer_amount = charge.amount
+
+    # Fixed platform fee
+    fee = PlatformFee.objects.first()
+
+    if not fee:
+        return Response(
+            {
+                "success": False,
+                "message": "Platform fee has not been configured by admin."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    platform_fee = fee.amount
+
+     # Total booking amount
+    total_amount = (
+        photographer_amount + platform_fee
+    )
+
+    # 50% advance payment
+    advance_amount = (
+        total_amount / Decimal("2")
+    )
+
+    # Remaining 50%
+    balance_amount = (
+        total_amount - advance_amount
+    )
+    
+
+    
+
+    # ------------------------
     # Create Booking
     # ------------------------
 
@@ -694,24 +754,45 @@ def create_booking(request):
         shoot_time=serializer.validated_data["shoot_time"],
         hours=serializer.validated_data["hours"],
         requirements=serializer.validated_data["requirements"],
-
+        photographer_amount=photographer_amount,
+        platform_fee=platform_fee,
+        advance_amount=advance_amount,
+        balance_amount=balance_amount,
+        status="payment_pending"
 
     )
 
     return Response(
-        {
-            "message": "Booking created successfully.",
-            "booking_id": booking.id,
-            "photographer": photographer.user.username,
-            "date": booking.date,
-            "session": booking.session,
-            "hours": booking.hours,
-            "location": booking.location,
-            "status": booking.status
-        },
-        status=status.HTTP_201_CREATED
-    )
+    {
+        "message": "Booking created successfully.",
+        "booking_id": booking.id,
+        "photographer": photographer.user.username,
+        "date": booking.date,
+        "session": booking.session,
+        "hours": booking.hours,
+        "location": booking.location,
 
+        "pricing": {
+            "photographer_amount": booking.photographer_amount,
+            "platform_fee": booking.platform_fee,
+            "total_amount": (
+                booking.photographer_amount +
+                booking.platform_fee
+            ),
+            "advance_amount": booking.advance_amount,
+            "balance_amount": booking.balance_amount,
+        },
+
+        "payment": {
+            "pay_now": booking.advance_amount,
+            "pay_after_photoshoot": booking.balance_amount,
+        },
+
+        "status": booking.status,
+    },
+    status=status.HTTP_201_CREATED
+)
+        
 
 @swagger_auto_schema(
     method="get",

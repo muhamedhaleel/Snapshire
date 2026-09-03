@@ -15,12 +15,12 @@ from .serializers import PendingPhotographerSerializer
 from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination
 from drf_yasg import openapi
-
+from .models import PlatformFee
 from .serializers import (
     AdminLoginSerializer,
     UserListSerializer,
     PhotographerListSerializer,
-    AdminBookingManagementSerializer
+    AdminBookingManagementSerializer,PlatformFeeSerializer
 )
 
 
@@ -471,3 +471,44 @@ def search_users(request):
     )
 
     return Response(serializer.data)
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=PlatformFeeSerializer
+)
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+@parser_classes([FormParser])
+def set_platform_fee(request):
+
+    fee = PlatformFee.objects.first()
+
+    if fee:
+        serializer = PlatformFeeSerializer(
+            fee,
+            data=request.data,
+            partial=True
+        )
+    else:
+        serializer = PlatformFeeSerializer(data=request.data)
+
+    if serializer.is_valid():
+        serializer.save()
+
+        return Response(
+            {
+                "success": True,
+                "message": "Platform fee updated successfully.",
+                "data": serializer.data
+            },
+            status=status.HTTP_200_OK
+        )
+
+    return Response(
+        {
+            "success": False,
+            "errors": serializer.errors
+        },
+        status=status.HTTP_400_BAD_REQUEST
+    )

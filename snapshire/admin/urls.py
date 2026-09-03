@@ -65,7 +65,12 @@ urlpatterns = [
     views.search_users,
     name="search-users"
 ),
-
+   
+    path(
+        "platform-fee/",
+        views.set_platform_fee,
+        name="set-platform-fee"
+    ),
     
 
 ]

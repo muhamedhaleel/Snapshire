@@ -79,7 +79,26 @@ class Booking(models.Model):
 
     requirements = models.TextField(blank=True)
 
-    
+    photographer_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
+
+    platform_fee = models.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
+
+    advance_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
+
+    balance_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
+
 
 
     status = models.CharField(
