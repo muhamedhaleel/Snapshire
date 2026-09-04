@@ -25,4 +25,25 @@ urlpatterns = [
     views.create_photographer_charge,
     name="create-photographer-charge"
 ),
+    path(
+    "booking/requests/",
+    views.photographer_booking_requests,
+    name="photographer-booking-requests"
+),
+    path(
+    "booking/<int:booking_id>/accept/",
+    views.accept_booking_request,
+    name="accept-booking-request"
+),
+
+    path(
+    "booking/<int:booking_id>/reject/",
+    views.reject_booking_request,
+    name="reject-booking-request"
+),
+    path(
+    "my-bookings/",
+    views.photographer_my_bookings,
+    name="photographer-my-bookings"
+),
     ]

@@ -106,6 +106,10 @@ class Booking(models.Model):
         choices=STATUS_CHOICES,
         default="payment_pending"
     )
+    reject_reason = models.TextField(
+        blank=True,
+        null=True
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 

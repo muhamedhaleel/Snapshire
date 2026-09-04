@@ -17,10 +17,10 @@ from user.serializers import NotificationSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from .models import WeeklyAvailability, AvailabilityException,PhotographerProfile,PhotographerCharge
-from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer
+from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer,RejectBookingSerializer,PhotographerMyBookingSerializer
 from datetime import date, timedelta
 import random
-from .serializers import  PhotographerVerifyOTPSerializer,PhotographerChargeSerializer
+from .serializers import  PhotographerVerifyOTPSerializer,PhotographerChargeSerializer,PhotographerBookingRequestSerializer
 
 from django.core.mail import send_mail
 from django.utils import timezone
@@ -28,7 +28,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import FormParser
 from rest_framework.response import Response
-from user.models import EmailOTP
+from user.models import EmailOTP,Booking
 from .serializers import SignupSerializer
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
@@ -779,4 +779,216 @@ def create_photographer_charge(request):
             "errors": serializer.errors
         },
         status=status.HTTP_400_BAD_REQUEST
+    )
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: PhotographerBookingRequestSerializer(many=True)}
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def photographer_booking_requests(request):
+
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    photographer = request.user.photographer_profile
+
+    bookings = Booking.objects.filter(
+        photographer=photographer,
+        status="waiting_photographer"
+    ).select_related("user")
+
+    serializer = PhotographerBookingRequestSerializer(
+        bookings,
+        many=True
+    )
+
+    return Response(
+        {
+            "success": True,
+            "count": bookings.count(),
+            "results": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+@swagger_auto_schema(
+    method="post"
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def accept_booking_request(request, booking_id):
+
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    photographer = request.user.photographer_profile
+
+    try:
+        booking = Booking.objects.get(
+            id=booking_id,
+            photographer=photographer
+        )
+    except Booking.DoesNotExist:
+        return Response(
+            {
+                "success": False,
+                "message": "Booking request not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if booking.status != "waiting_photographer":
+        return Response(
+            {
+                "success": False,
+                "message": "This booking request is no longer available."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    booking.status = "photographer_accepted"
+    booking.save(update_fields=["status"])
+
+    return Response(
+        {
+            "success": True,
+            "message": "Booking request accepted successfully.",
+            "data": {
+                "booking_id": booking.id,
+                "status": booking.status
+            }
+        },
+        status=status.HTTP_200_OK
+    )
+
+@swagger_auto_schema(
+    method="post",
+    request_body=RejectBookingSerializer
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def reject_booking_request(request, booking_id):
+
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    photographer = request.user.photographer_profile
+
+    try:
+        booking = Booking.objects.get(
+            id=booking_id,
+            photographer=photographer
+        )
+    except Booking.DoesNotExist:
+        return Response(
+            {
+                "success": False,
+                "message": "Booking request not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if booking.status != "waiting_photographer":
+        return Response(
+            {
+                "success": False,
+                "message": "This booking request is no longer available."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    serializer = RejectBookingSerializer(data=request.data)
+
+    if not serializer.is_valid():
+        return Response(
+            {
+                "success": False,
+                "errors": serializer.errors
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    reject_reason = serializer.validated_data["reject_reason"]
+
+    # Change status and save rejection reason
+    booking.status = "photographer_rejected"
+    booking.reject_reason = reject_reason
+
+    booking.save(
+        update_fields=[
+            "status",
+            "reject_reason"
+        ]
+    )
+
+    return Response(
+        {
+            "success": True,
+            "message": "Booking request rejected successfully.",
+            "data": {
+                "booking_id": booking.id,
+                "status": booking.status,
+                "reject_reason": booking.reject_reason
+            }
+        },
+        status=status.HTTP_200_OK
+    )
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: PhotographerMyBookingSerializer(many=True)}
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def photographer_my_bookings(request):
+
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    photographer = request.user.photographer_profile
+
+    bookings = Booking.objects.filter(
+        photographer=photographer
+    ).select_related("user").order_by("-created_at")
+
+    serializer = PhotographerMyBookingSerializer(
+        bookings,
+        many=True
+    )
+
+    return Response(
+        {
+            "success": True,
+            "count": bookings.count(),
+            "results": serializer.data
+        },
+        status=status.HTTP_200_OK
     )

@@ -504,6 +504,7 @@ class UserBookingStatusSerializer(serializers.ModelSerializer):
         source="photographer.user.username",
         read_only=True
     )
+    payment = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
@@ -514,9 +515,32 @@ class UserBookingStatusSerializer(serializers.ModelSerializer):
             "date",
             "session",
             "shoot_time",
-            "status"
+            "status",
+            "payment",
             
         ]
+    def get_payment(self, obj):
+
+        advance_payment = obj.payments.filter(
+            payment_type="advance",
+            status="paid"
+        ).first()
+
+        if advance_payment:
+
+            return {
+                "payment_type": advance_payment.payment_type,
+                "payment_status": advance_payment.status,
+                "advance_amount": float(advance_payment.amount),
+                "balance_amount": float(obj.balance_amount),
+            }
+
+        return {
+            "payment_type": "advance",
+            "payment_status": "pending",
+            "advance_amount": float(obj.advance_amount),
+            "balance_amount": float(obj.balance_amount),
+        }
 
 
 class NotificationSerializer(serializers.ModelSerializer):

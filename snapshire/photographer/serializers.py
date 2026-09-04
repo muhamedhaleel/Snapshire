@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 from .models import PhotographerProfile
 from django.contrib.auth import authenticate
-from user.models import Notification
+from user.models import Notification,Booking
 from.models import WeeklyAvailability,AvailabilityException,PhotographerCharge
 import re
 from django.contrib.auth.models import User
@@ -491,3 +491,68 @@ class PhotographerChargeSerializer(serializers.ModelSerializer):
 
         return value
 
+
+
+class PhotographerBookingRequestSerializer(serializers.ModelSerializer):
+    user_name = serializers.SerializerMethodField()
+    user_email = serializers.EmailField(source="user.email")
+
+    class Meta:
+        model = Booking
+        fields = [
+            "id",
+            "user_name",
+            "user_email",
+            "date",
+            "session",
+            "location",
+            "shoot_time",
+            "hours",
+            "requirements",
+            "photographer_amount",
+            
+            "status",
+            "created_at",
+        ]
+
+    def get_user_name(self, obj):
+        return (
+            f"{obj.user.first_name} "
+            f"{obj.user.last_name}"
+        ).strip()
+
+
+class RejectBookingSerializer(serializers.Serializer):
+    reject_reason = serializers.CharField(
+        required=True,
+        allow_blank=False
+    )
+
+
+class PhotographerMyBookingSerializer(serializers.ModelSerializer):
+    user_name = serializers.SerializerMethodField()
+    user_email = serializers.EmailField(source="user.email")
+
+    class Meta:
+        model = Booking
+        fields = [
+            "id",
+            "user_name",
+            "user_email",
+            "date",
+            "session",
+            "location",
+            "shoot_time",
+            "hours",
+            "requirements",
+            "photographer_amount",
+            "status",
+            "reject_reason",
+            "created_at",
+        ]
+
+    def get_user_name(self, obj):
+        return (
+            f"{obj.user.first_name} "
+            f"{obj.user.last_name}"
+        ).strip()
