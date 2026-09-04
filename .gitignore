@@ -15,3 +15,5 @@ __pycache__/
 # Static & media files
 staticfiles/
 media/
+
+.env

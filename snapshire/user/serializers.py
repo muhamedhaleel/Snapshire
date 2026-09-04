@@ -568,5 +568,23 @@ class ResetPasswordSerializer(serializers.Serializer):
         max_length=128,
         write_only=True
     )
+class CreatePaymentSerializer(serializers.Serializer):
+    booking_id = serializers.IntegerField()
 
 
+class VerifyPaymentSerializer(serializers.Serializer):
+
+    razorpay_payment_id = serializers.CharField(
+        required=True,
+        allow_blank=False
+    )
+
+    razorpay_order_id = serializers.CharField(
+        required=True,
+        allow_blank=False
+    )
+
+    razorpay_signature = serializers.CharField(
+        required=True,
+        allow_blank=False
+    )

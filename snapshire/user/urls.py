@@ -25,6 +25,15 @@ urlpatterns = [
     path("forgot-password/",views.forgot_password,name="forgot-password"),
     path("reset-password/",views.reset_password,name="reset-password"),
 
-    
+    path(
+    "booking/payment/create/",
+    views.create_razorpay_order,
+    name="create-razorpay-order"
+),
+    path(
+        "booking/payment/verify/",
+        views.verify_razorpay_payment,
+        name="verify-razorpay-payment"
+    ),
      
 ]

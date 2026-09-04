@@ -11,7 +11,7 @@ from rest_framework.parsers import FormParser
 from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
 from photographer.models import PhotographerProfile
-from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerFilterSerializer
+from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerFilterSerializer,CreatePaymentSerializer,VerifyPaymentSerializer
 from .models import Booking
 from .serializers import BookingSerializer,UserBookingStatusSerializer,VerifyOTPSerializer
 from decimal import Decimal
@@ -37,6 +37,12 @@ from django.utils import timezone
 from .models import EmailOTP, UserProfile, PasswordResetOTP
 from decimal import Decimal
 from admin.models import PlatformFee
+
+import razorpay
+
+from django.conf import settings
+
+from .models import Booking, Payment
 
 
 
@@ -1238,4 +1244,283 @@ def reset_password(request):
     return Response(
         serializer.errors,
         status=status.HTTP_400_BAD_REQUEST
+    )
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=CreatePaymentSerializer
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
+def create_razorpay_order(request):
+
+    serializer = CreatePaymentSerializer(
+        data=request.data
+    )
+
+    if not serializer.is_valid():
+        return Response(
+            {
+                "success": False,
+                "errors": serializer.errors
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    booking_id = serializer.validated_data["booking_id"]
+
+    # Get booking belonging to logged-in user
+    try:
+        booking = Booking.objects.get(
+            id=booking_id,
+            user=request.user
+        )
+    except Booking.DoesNotExist:
+        return Response(
+            {
+                "success": False,
+                "message": "Booking not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Booking must be waiting for payment
+    if booking.status != "payment_pending":
+        return Response(
+            {
+                "success": False,
+                "message": "This booking is not available for payment."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Check whether an unpaid advance payment already exists
+    existing_payment = Payment.objects.filter(
+        booking=booking,
+        payment_type="advance",
+        status="created"
+    ).first()
+
+    if existing_payment:
+
+        return Response(
+            {
+                "success": True,
+                "message": "Payment order already exists.",
+                "data": {
+                    "booking_id": booking.id,
+                    "payment_id": existing_payment.id,
+                    "payment_type": existing_payment.payment_type,
+                    "amount": existing_payment.amount,
+                    "currency": "INR",
+                    "razorpay_order_id": existing_payment.razorpay_order_id,
+                    "razorpay_key_id": settings.RAZORPAY_KEY_ID
+                }
+            },
+            status=status.HTTP_200_OK
+        )
+
+    # Advance amount = 50%
+    amount = booking.advance_amount
+
+    # Convert rupees to paise
+    amount_paise = int(amount * 100)
+
+    # Razorpay client
+    client = razorpay.Client(
+        auth=(
+            settings.RAZORPAY_KEY_ID,
+            settings.RAZORPAY_KEY_SECRET
+        )
+    )
+
+    # Create Razorpay order
+    try:
+
+        razorpay_order = client.order.create(
+            {
+                "amount": amount_paise,
+                "currency": "INR",
+                "receipt": f"booking_{booking.id}"
+            }
+        )
+
+    except Exception as e:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Unable to create Razorpay order.",
+                "error": str(e)
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    # Save payment in database
+    payment = Payment.objects.create(
+        booking=booking,
+        payment_type="advance",
+        amount=amount,
+        razorpay_order_id=razorpay_order["id"],
+        status="created"
+    )
+
+    return Response(
+        {
+            "success": True,
+            "message": "Razorpay order created successfully.",
+            "data": {
+                "booking_id": booking.id,
+                "payment_id": payment.id,
+                "payment_type": payment.payment_type,
+                "amount": payment.amount,
+                "currency": "INR",
+                "razorpay_order_id": payment.razorpay_order_id,
+                "razorpay_key_id": settings.RAZORPAY_KEY_ID
+            }
+        },
+        status=status.HTTP_201_CREATED
+    )
+@swagger_auto_schema(
+    method="post",
+    request_body=VerifyPaymentSerializer
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
+def verify_razorpay_payment(request):
+
+    serializer = VerifyPaymentSerializer(
+        data=request.data
+    )
+
+    if not serializer.is_valid():
+        return Response(
+            {
+                "success": False,
+                "errors": serializer.errors
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    razorpay_payment_id = serializer.validated_data[
+        "razorpay_payment_id"
+    ]
+
+    razorpay_order_id = serializer.validated_data[
+        "razorpay_order_id"
+    ]
+
+    razorpay_signature = serializer.validated_data[
+        "razorpay_signature"
+    ]
+
+    # Find the payment belonging to the logged-in user
+    try:
+
+        payment = Payment.objects.get(
+            razorpay_order_id=razorpay_order_id,
+            booking__user=request.user
+        )
+
+    except Payment.DoesNotExist:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Payment record not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # If payment is already paid
+    if payment.status == "paid":
+
+        return Response(
+            {
+                "success": True,
+                "message": "Payment already verified.",
+                "data": {
+                    "payment_id": payment.id,
+                    "booking_id": payment.booking.id,
+                    "payment_status": payment.status,
+                    "booking_status": payment.booking.status
+                }
+            },
+            status=status.HTTP_200_OK
+        )
+
+    # Create Razorpay client
+    client = razorpay.Client(
+        auth=(
+            settings.RAZORPAY_KEY_ID,
+            settings.RAZORPAY_KEY_SECRET
+        )
+    )
+
+    # Verify Razorpay signature
+    try:
+
+        client.utility.verify_payment_signature(
+            {
+                "razorpay_payment_id": razorpay_payment_id,
+                "razorpay_order_id": razorpay_order_id,
+                "razorpay_signature": razorpay_signature
+            }
+        )
+
+    except razorpay.errors.SignatureVerificationError:
+
+        payment.status = "failed"
+
+        payment.save(
+            update_fields=["status"]
+        )
+
+        return Response(
+            {
+                "success": False,
+                "message": "Payment verification failed."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Signature is valid
+    payment.razorpay_payment_id = razorpay_payment_id
+    payment.razorpay_signature = razorpay_signature
+    payment.status = "paid"
+
+    payment.save(
+        update_fields=[
+            "razorpay_payment_id",
+            "razorpay_signature",
+            "status"
+        ]
+    )
+
+    # Update booking
+    booking = payment.booking
+
+    booking.status = "waiting_photographer"
+
+    booking.save(
+        update_fields=["status"]
+    )
+
+    return Response(
+        {
+            "success": True,
+            "message": "Payment verified successfully.",
+            "data": {
+                "payment_id": payment.id,
+                "booking_id": booking.id,
+                "payment_type": payment.payment_type,
+                "amount": payment.amount,
+                "payment_status": payment.status,
+                "booking_status": booking.status
+            }
+        },
+        status=status.HTTP_200_OK
     )
