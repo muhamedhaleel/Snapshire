@@ -1247,6 +1247,28 @@ def reset_password(request):
     )
 
 
+from decimal import Decimal
+
+import razorpay
+
+from django.conf import settings
+
+from rest_framework.decorators import (
+    api_view,
+    permission_classes,
+    parser_classes
+)
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import FormParser
+from rest_framework.response import Response
+from rest_framework import status
+
+from drf_yasg.utils import swagger_auto_schema
+
+from .models import Booking, Payment
+from .serializers import CreatePaymentSerializer
+
+
 @swagger_auto_schema(
     method="post",
     request_body=CreatePaymentSerializer
@@ -1256,9 +1278,7 @@ def reset_password(request):
 @parser_classes([FormParser])
 def create_razorpay_order(request):
 
-    serializer = CreatePaymentSerializer(
-        data=request.data
-    )
+    serializer = CreatePaymentSerializer(data=request.data)
 
     if not serializer.is_valid():
         return Response(
@@ -1271,12 +1291,16 @@ def create_razorpay_order(request):
 
     booking_id = serializer.validated_data["booking_id"]
 
-    # Get booking belonging to logged-in user
+    # -----------------------------------------
+    # GET USER'S BOOKING
+    # -----------------------------------------
+
     try:
         booking = Booking.objects.get(
             id=booking_id,
             user=request.user
         )
+
     except Booking.DoesNotExist:
         return Response(
             {
@@ -1286,7 +1310,10 @@ def create_razorpay_order(request):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # Booking must be waiting for payment
+    # -----------------------------------------
+    # CHECK BOOKING STATUS
+    # -----------------------------------------
+
     if booking.status != "payment_pending":
         return Response(
             {
@@ -1296,7 +1323,10 @@ def create_razorpay_order(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Check whether an unpaid advance payment already exists
+    # -----------------------------------------
+    # CHECK EXISTING ADVANCE PAYMENT
+    # -----------------------------------------
+
     existing_payment = Payment.objects.filter(
         booking=booking,
         payment_type="advance",
@@ -1322,13 +1352,28 @@ def create_razorpay_order(request):
             status=status.HTTP_200_OK
         )
 
-    # Advance amount = 50%
-    amount = booking.advance_amount
+    # -----------------------------------------
+    # ADVANCE AMOUNT
+    # -----------------------------------------
 
-    # Convert rupees to paise
-    amount_paise = int(amount * 100)
+    amount = Decimal(str(booking.advance_amount))
 
-    # Razorpay client
+    if amount <= 0:
+        return Response(
+            {
+                "success": False,
+                "message": "Invalid advance payment amount."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Razorpay requires amount in paise
+    amount_paise = int(amount * Decimal("100"))
+
+    # -----------------------------------------
+    # RAZORPAY CLIENT
+    # -----------------------------------------
+
     client = razorpay.Client(
         auth=(
             settings.RAZORPAY_KEY_ID,
@@ -1336,7 +1381,10 @@ def create_razorpay_order(request):
         )
     )
 
-    # Create Razorpay order
+    # -----------------------------------------
+    # CREATE RAZORPAY ORDER
+    # -----------------------------------------
+
     try:
 
         razorpay_order = client.order.create(
@@ -1347,18 +1395,19 @@ def create_razorpay_order(request):
             }
         )
 
-    except Exception as e:
-
+    except Exception:
         return Response(
             {
                 "success": False,
-                "message": "Unable to create Razorpay order.",
-                "error": str(e)
+                "message": "Unable to create Razorpay order."
             },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
-    # Save payment in database
+    # -----------------------------------------
+    # SAVE PAYMENT
+    # -----------------------------------------
+
     payment = Payment.objects.create(
         booking=booking,
         payment_type="advance",
@@ -1366,6 +1415,10 @@ def create_razorpay_order(request):
         razorpay_order_id=razorpay_order["id"],
         status="created"
     )
+
+    # -----------------------------------------
+    # RESPONSE
+    # -----------------------------------------
 
     return Response(
         {
@@ -1383,6 +1436,30 @@ def create_razorpay_order(request):
         },
         status=status.HTTP_201_CREATED
     )
+
+
+from decimal import Decimal
+
+import razorpay
+
+from django.conf import settings
+
+from rest_framework.decorators import (
+    api_view,
+    permission_classes,
+    parser_classes
+)
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import FormParser
+from rest_framework.response import Response
+from rest_framework import status
+
+from drf_yasg.utils import swagger_auto_schema
+
+from .models import Payment
+from .serializers import VerifyPaymentSerializer
+
+
 @swagger_auto_schema(
     method="post",
     request_body=VerifyPaymentSerializer
@@ -1392,9 +1469,7 @@ def create_razorpay_order(request):
 @parser_classes([FormParser])
 def verify_razorpay_payment(request):
 
-    serializer = VerifyPaymentSerializer(
-        data=request.data
-    )
+    serializer = VerifyPaymentSerializer(data=request.data)
 
     if not serializer.is_valid():
         return Response(
@@ -1417,7 +1492,10 @@ def verify_razorpay_payment(request):
         "razorpay_signature"
     ]
 
-    # Find the payment belonging to the logged-in user
+    # -----------------------------------------
+    # GET PAYMENT
+    # -----------------------------------------
+
     try:
 
         payment = Payment.objects.get(
@@ -1435,7 +1513,10 @@ def verify_razorpay_payment(request):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # If payment is already paid
+    # -----------------------------------------
+    # ALREADY PAID
+    # -----------------------------------------
+
     if payment.status == "paid":
 
         return Response(
@@ -1445,14 +1526,16 @@ def verify_razorpay_payment(request):
                 "data": {
                     "payment_id": payment.id,
                     "booking_id": payment.booking.id,
-                    "payment_status": payment.status,
-                    "booking_status": payment.booking.status
+                    "payment_status": payment.status
                 }
             },
             status=status.HTTP_200_OK
         )
 
-    # Create Razorpay client
+    # -----------------------------------------
+    # RAZORPAY CLIENT
+    # -----------------------------------------
+
     client = razorpay.Client(
         auth=(
             settings.RAZORPAY_KEY_ID,
@@ -1460,34 +1543,108 @@ def verify_razorpay_payment(request):
         )
     )
 
-    # Verify Razorpay signature
+    # -----------------------------------------
+    # STEP 1
+    # VERIFY SIGNATURE
+    # -----------------------------------------
+
     try:
 
         client.utility.verify_payment_signature(
             {
                 "razorpay_payment_id": razorpay_payment_id,
-                "razorpay_order_id": razorpay_order_id,
+                "razorpay_order_id": payment.razorpay_order_id,
                 "razorpay_signature": razorpay_signature
             }
         )
 
     except razorpay.errors.SignatureVerificationError:
 
-        payment.status = "failed"
-
-        payment.save(
-            update_fields=["status"]
-        )
-
         return Response(
             {
                 "success": False,
-                "message": "Payment verification failed."
+                "message": "Payment signature verification failed."
             },
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Signature is valid
+    # -----------------------------------------
+    # STEP 2
+    # FETCH PAYMENT FROM RAZORPAY
+    # -----------------------------------------
+
+    try:
+
+        razorpay_payment = client.payment.fetch(
+            razorpay_payment_id
+        )
+
+    except Exception:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Unable to fetch Razorpay payment."
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    # -----------------------------------------
+    # STEP 3
+    # CHECK ORDER ID
+    # -----------------------------------------
+
+    if razorpay_payment.get("order_id") != payment.razorpay_order_id:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Payment does not belong to this order."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # -----------------------------------------
+    # STEP 4
+    # CHECK AMOUNT
+    # -----------------------------------------
+
+    expected_amount = int(
+        Decimal(str(payment.amount)) * Decimal("100")
+    )
+
+    razorpay_amount = razorpay_payment.get("amount")
+
+    if razorpay_amount != expected_amount:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Payment amount mismatch."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # -----------------------------------------
+    # STEP 5
+    # CHECK STATUS
+    # -----------------------------------------
+
+    if razorpay_payment.get("status") != "captured":
+
+        return Response(
+            {
+                "success": False,
+                "message": "Payment has not been captured."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # -----------------------------------------
+    # STEP 6
+    # SAVE PAYMENT
+    # -----------------------------------------
+
     payment.razorpay_payment_id = razorpay_payment_id
     payment.razorpay_signature = razorpay_signature
     payment.status = "paid"
@@ -1500,7 +1657,11 @@ def verify_razorpay_payment(request):
         ]
     )
 
-    # Update booking
+    # -----------------------------------------
+    # STEP 7
+    # UPDATE BOOKING
+    # -----------------------------------------
+
     booking = payment.booking
 
     booking.status = "waiting_photographer"
@@ -1508,6 +1669,10 @@ def verify_razorpay_payment(request):
     booking.save(
         update_fields=["status"]
     )
+
+    # -----------------------------------------
+    # RESPONSE
+    # -----------------------------------------
 
     return Response(
         {

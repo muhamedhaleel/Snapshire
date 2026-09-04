@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+    <title>Razorpay Test Payment</title>
+</head>
+
+<body>
+
+```
+<h2>Razorpay Test Payment</h2>
+
+<button onclick="payNow()">
+    Pay ₹172.50
+</button>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+<script>
+
+    function payNow() {
+
+        var options = {
+
+            key: "rzp_test_TXpMI3ALH9qtgL",
+
+            amount: 17250,
+
+            currency: "INR",
+
+            name: "Snapshire",
+
+            description: "Booking Advance Payment",
+
+            order_id: "order_TXwXDd40qmfZPV",
+
+            handler: function (response) {
+
+                console.log("========== RAZORPAY RESPONSE ==========");
+
+                console.log("Full Response:", response);
+
+                console.log(
+                    "Payment ID:",
+                    response.razorpay_payment_id
+                );
+
+                console.log(
+                    "Order ID:",
+                    response.razorpay_order_id
+                );
+
+                console.log(
+                    "Signature:",
+                    response.razorpay_signature
+                );
+
+                console.log("========================================");
+
+                alert(
+                    "Payment successful!\n\n" +
+                    "Payment ID: " +
+                    response.razorpay_payment_id +
+                    "\n\n" +
+                    "Order ID: " +
+                    response.razorpay_order_id
+                );
+            },
+
+            theme: {
+                color: "#000000"
+            }
+        };
+
+        var rzp = new Razorpay(options);
+
+        rzp.open();
+    }
+
+</script>
+```
+
+</body>
+</html>
