@@ -46,4 +46,11 @@ urlpatterns = [
     views.photographer_my_bookings,
     name="photographer-my-bookings"
 ),
+    path(
+    "booking/<int:booking_id>/work-status/",
+    views.update_work_status,
+    name="update-work-status"
+),
+
+
     ]

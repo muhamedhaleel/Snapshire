@@ -48,6 +48,8 @@ class Booking(models.Model):
         ("photographer_rejected", "Photographer Rejected"),
         ("waiting_admin", "Waiting for Admin"),
         ("confirmed", "Confirmed"),
+        ("work_started", "Work Started"),
+        ("in_progress", "Work In Progress"),
         ("completed", "Completed"),
         ("cancelled", "Cancelled"),
     ]
@@ -230,3 +232,39 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.booking.id} - {self.payment_type}"
+
+
+class Feedback(models.Model):
+
+    booking = models.OneToOneField(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="feedback"
+    )
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="feedbacks"
+    )
+
+    photographer = models.ForeignKey(
+        PhotographerProfile,
+        on_delete=models.CASCADE,
+        related_name="feedbacks"
+    )
+
+    rating = models.PositiveIntegerField()
+
+    comment = models.TextField()
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    def __str__(self):
+
+        return (
+            f"{self.photographer.user.username} "
+            f"- {self.rating} stars"
+        )

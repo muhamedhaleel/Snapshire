@@ -8,6 +8,7 @@ import re
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password as django_validate_password
 from rest_framework import serializers
+from rest_framework import serializers
 
 
 
@@ -556,3 +557,18 @@ class PhotographerMyBookingSerializer(serializers.ModelSerializer):
             f"{obj.user.first_name} "
             f"{obj.user.last_name}"
         ).strip()
+
+
+
+
+
+
+class UpdateWorkStatusSerializer(serializers.Serializer):
+
+    status = serializers.ChoiceField(
+        choices=[
+            ("work_started", "Work Started"),
+            ("in_progress", "In Progress"),
+            ("completed", "Completed"),
+        ]
+    )

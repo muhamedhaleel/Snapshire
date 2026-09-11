@@ -4,7 +4,7 @@ from rest_framework.decorators import api_view,parser_classes,permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import SignupSerializer, LoginSerializer,UpdateProfileSerializer
+from .serializers import SignupSerializer, LoginSerializer,UpdateProfileSerializer,CreateBalancePaymentSerializer
 from .models import UserProfile
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.parsers import FormParser
@@ -16,7 +16,7 @@ from .models import Booking
 from .serializers import BookingSerializer,UserBookingStatusSerializer,VerifyOTPSerializer
 from decimal import Decimal
 from .models import Notification
-from .serializers import NotificationSerializer,ForgotPasswordSerializer,ResetPasswordSerializer
+from .serializers import NotificationSerializer,ForgotPasswordSerializer,ResetPasswordSerializer,BookingPaymentDetailsSerializer,CreateFeedbackSerializer
 from django.db.models import Q
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -42,7 +42,7 @@ import razorpay
 
 from django.conf import settings
 
-from .models import Booking, Payment
+from .models import Booking, Payment,Feedback
 
 
 
@@ -800,6 +800,28 @@ def create_booking(request):
 )
         
 
+# @swagger_auto_schema(
+#     method="get",
+#     responses={200: UserBookingStatusSerializer(many=True)}
+# )
+# @api_view(["GET"])
+# @permission_classes([IsAuthenticated])
+# def user_booking_status(request):
+
+#     bookings = Booking.objects.filter(
+#         user=request.user
+#     ).select_related(
+#         "photographer",
+#         "photographer__user"
+#     ).order_by("-created_at")
+
+#     serializer = UserBookingStatusSerializer(
+#         bookings,
+#         many=True
+#     )
+
+#     return Response(serializer.data)
+
 @swagger_auto_schema(
     method="get",
     responses={200: UserBookingStatusSerializer(many=True)}
@@ -813,6 +835,8 @@ def user_booking_status(request):
     ).select_related(
         "photographer",
         "photographer__user"
+    ).prefetch_related(
+        "payments"
     ).order_by("-created_at")
 
     serializer = UserBookingStatusSerializer(
@@ -820,9 +844,14 @@ def user_booking_status(request):
         many=True
     )
 
-    return Response(serializer.data)
-
-
+    return Response(
+        {
+            "success": True,
+            "count": bookings.count(),
+            "results": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )
 
 
 @api_view(["GET"])
@@ -1469,9 +1498,16 @@ from .serializers import VerifyPaymentSerializer
 @parser_classes([FormParser])
 def verify_razorpay_payment(request):
 
-    serializer = VerifyPaymentSerializer(data=request.data)
+    # -----------------------------------------
+    # VALIDATE REQUEST DATA
+    # -----------------------------------------
+
+    serializer = VerifyPaymentSerializer(
+        data=request.data
+    )
 
     if not serializer.is_valid():
+
         return Response(
             {
                 "success": False,
@@ -1493,12 +1529,14 @@ def verify_razorpay_payment(request):
     ]
 
     # -----------------------------------------
-    # GET PAYMENT
+    # GET PAYMENT RECORD
     # -----------------------------------------
 
     try:
 
-        payment = Payment.objects.get(
+        payment = Payment.objects.select_related(
+            "booking"
+        ).get(
             razorpay_order_id=razorpay_order_id,
             booking__user=request.user
         )
@@ -1519,21 +1557,26 @@ def verify_razorpay_payment(request):
 
     if payment.status == "paid":
 
+        booking = payment.booking
+
         return Response(
             {
                 "success": True,
                 "message": "Payment already verified.",
                 "data": {
                     "payment_id": payment.id,
-                    "booking_id": payment.booking.id,
-                    "payment_status": payment.status
+                    "booking_id": booking.id,
+                    "payment_type": payment.payment_type,
+                    "amount": str(payment.amount),
+                    "payment_status": payment.status,
+                    "booking_status": booking.status
                 }
             },
             status=status.HTTP_200_OK
         )
 
     # -----------------------------------------
-    # RAZORPAY CLIENT
+    # CREATE RAZORPAY CLIENT
     # -----------------------------------------
 
     client = razorpay.Client(
@@ -1544,17 +1587,21 @@ def verify_razorpay_payment(request):
     )
 
     # -----------------------------------------
-    # STEP 1
-    # VERIFY SIGNATURE
+    # STEP 1: VERIFY SIGNATURE
     # -----------------------------------------
 
     try:
 
         client.utility.verify_payment_signature(
             {
-                "razorpay_payment_id": razorpay_payment_id,
-                "razorpay_order_id": payment.razorpay_order_id,
-                "razorpay_signature": razorpay_signature
+                "razorpay_payment_id":
+                    razorpay_payment_id,
+
+                "razorpay_order_id":
+                    payment.razorpay_order_id,
+
+                "razorpay_signature":
+                    razorpay_signature
             }
         )
 
@@ -1569,8 +1616,7 @@ def verify_razorpay_payment(request):
         )
 
     # -----------------------------------------
-    # STEP 2
-    # FETCH PAYMENT FROM RAZORPAY
+    # STEP 2: FETCH PAYMENT FROM RAZORPAY
     # -----------------------------------------
 
     try:
@@ -1579,22 +1625,25 @@ def verify_razorpay_payment(request):
             razorpay_payment_id
         )
 
-    except Exception:
+    except Exception as e:
 
         return Response(
             {
                 "success": False,
-                "message": "Unable to fetch Razorpay payment."
+                "message": "Unable to fetch Razorpay payment.",
+                "error": str(e)
             },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
     # -----------------------------------------
-    # STEP 3
-    # CHECK ORDER ID
+    # STEP 3: CHECK ORDER ID
     # -----------------------------------------
 
-    if razorpay_payment.get("order_id") != payment.razorpay_order_id:
+    if (
+        razorpay_payment.get("order_id")
+        != payment.razorpay_order_id
+    ):
 
         return Response(
             {
@@ -1605,8 +1654,7 @@ def verify_razorpay_payment(request):
         )
 
     # -----------------------------------------
-    # STEP 4
-    # CHECK AMOUNT
+    # STEP 4: CHECK AMOUNT
     # -----------------------------------------
 
     expected_amount = int(
@@ -1626,8 +1674,7 @@ def verify_razorpay_payment(request):
         )
 
     # -----------------------------------------
-    # STEP 5
-    # CHECK STATUS
+    # STEP 5: CHECK PAYMENT STATUS
     # -----------------------------------------
 
     if razorpay_payment.get("status") != "captured":
@@ -1641,8 +1688,7 @@ def verify_razorpay_payment(request):
         )
 
     # -----------------------------------------
-    # STEP 6
-    # SAVE PAYMENT
+    # STEP 6: SAVE PAYMENT
     # -----------------------------------------
 
     payment.razorpay_payment_id = razorpay_payment_id
@@ -1658,20 +1704,33 @@ def verify_razorpay_payment(request):
     )
 
     # -----------------------------------------
-    # STEP 7
-    # UPDATE BOOKING
+    # STEP 7: UPDATE BOOKING STATUS
     # -----------------------------------------
 
     booking = payment.booking
 
-    booking.status = "waiting_photographer"
+    if payment.payment_type == "advance":
 
-    booking.save(
-        update_fields=["status"]
-    )
+        # Advance payment completed.
+        # Send booking to photographer.
+        booking.status = "waiting_photographer"
+
+        booking.save(
+            update_fields=["status"]
+        )
+
+    elif payment.payment_type == "balance":
+
+        # Balance payment happens after work completion.
+        # Booking must remain completed.
+        booking.status = "completed"
+
+        booking.save(
+            update_fields=["status"]
+        )
 
     # -----------------------------------------
-    # RESPONSE
+    # STEP 8: SUCCESS RESPONSE
     # -----------------------------------------
 
     return Response(
@@ -1682,10 +1741,428 @@ def verify_razorpay_payment(request):
                 "payment_id": payment.id,
                 "booking_id": booking.id,
                 "payment_type": payment.payment_type,
-                "amount": payment.amount,
+                "amount": str(payment.amount),
                 "payment_status": payment.status,
                 "booking_status": booking.status
             }
         },
         status=status.HTTP_200_OK
+    )
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def booking_payment_details(request, booking_id):
+
+    try:
+
+        booking = Booking.objects.get(
+            id=booking_id,
+            user=request.user
+        )
+
+    except Booking.DoesNotExist:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Booking not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    serializer = BookingPaymentDetailsSerializer(booking)
+
+    # Photographer has not completed work
+    if booking.status != "completed":
+
+        return Response(
+            {
+                "success": True,
+                "message": (
+                    "Balance payment is not available yet. "
+                    "The photographer has not completed the work."
+                ),
+                "data": serializer.data
+            },
+            status=status.HTTP_200_OK
+        )
+
+    # Photographer completed work
+    return Response(
+        {
+            "success": True,
+            "message": "Work completed. Balance payment is available.",
+            "data": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=CreateBalancePaymentSerializer
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
+def create_balance_payment(request):
+
+    # -------------------------------
+    # 1. VALIDATE DATA
+    # -------------------------------
+
+    serializer = CreateBalancePaymentSerializer(
+        data=request.data
+    )
+
+    if not serializer.is_valid():
+
+        return Response(
+            {
+                "success": False,
+                "errors": serializer.errors
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    booking_id = serializer.validated_data["booking_id"]
+
+    # -------------------------------
+    # 2. GET USER BOOKING
+    # -------------------------------
+
+    try:
+
+        booking = Booking.objects.get(
+            id=booking_id,
+            user=request.user
+        )
+
+    except Booking.DoesNotExist:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Booking not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # -------------------------------
+    # 3. CHECK WORK COMPLETION
+    # -------------------------------
+
+    if booking.status != "completed":
+
+        return Response(
+            {
+                "success": False,
+                "message": (
+                    "Balance payment is available only "
+                    "after the photographer completes the work."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # -------------------------------
+    # 4. CHECK ADVANCE PAYMENT
+    # -------------------------------
+
+    advance_payment = Payment.objects.filter(
+        booking=booking,
+        payment_type="advance",
+        status="paid"
+    ).exists()
+
+    if not advance_payment:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Advance payment is not completed."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # -------------------------------
+    # 5. CHECK BALANCE ALREADY PAID
+    # -------------------------------
+
+    balance_paid = Payment.objects.filter(
+        booking=booking,
+        payment_type="balance",
+        status="paid"
+    ).first()
+
+    if balance_paid:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Balance payment already completed."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # -------------------------------
+    # 6. CHECK EXISTING ORDER
+    # -------------------------------
+
+    existing_payment = Payment.objects.filter(
+        booking=booking,
+        payment_type="balance",
+        status="created"
+    ).first()
+
+    if existing_payment:
+
+        return Response(
+            {
+                "success": True,
+                "message": "Balance payment order already exists.",
+                "data": {
+                    "booking_id": booking.id,
+                    "payment_id": existing_payment.id,
+                    "payment_type": "balance",
+                    "amount": str(existing_payment.amount),
+                    "currency": "INR",
+                    "razorpay_order_id":
+                        existing_payment.razorpay_order_id,
+                    "razorpay_key_id":
+                        settings.RAZORPAY_KEY_ID
+                }
+            },
+            status=status.HTTP_200_OK
+        )
+
+    # -------------------------------
+    # 7. BALANCE AMOUNT
+    # -------------------------------
+
+    amount = booking.balance_amount
+
+    amount_paise = int(
+        Decimal(str(amount)) * 100
+    )
+
+    # -------------------------------
+    # 8. RAZORPAY CLIENT
+    # -------------------------------
+
+    client = razorpay.Client(
+        auth=(
+            settings.RAZORPAY_KEY_ID,
+            settings.RAZORPAY_KEY_SECRET
+        )
+    )
+
+    # -------------------------------
+    # 9. CREATE ORDER
+    # -------------------------------
+
+    try:
+
+        razorpay_order = client.order.create(
+            {
+                "amount": amount_paise,
+                "currency": "INR",
+                "receipt": f"balance_booking_{booking.id}"
+            }
+        )
+
+    except Exception as e:
+
+        return Response(
+            {
+                "success": False,
+                "message":
+                    "Unable to create balance payment order.",
+                "error": str(e)
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    # -------------------------------
+    # 10. CREATE PAYMENT RECORD
+    # -------------------------------
+
+    payment = Payment.objects.create(
+        booking=booking,
+        payment_type="balance",
+        amount=amount,
+        razorpay_order_id=razorpay_order["id"],
+        status="created"
+    )
+
+    # -------------------------------
+    # 11. RESPONSE
+    # -------------------------------
+
+    return Response(
+        {
+            "success": True,
+            "message":
+                "Balance payment order created successfully.",
+
+            "data": {
+
+                "booking_id": booking.id,
+
+                "payment_id": payment.id,
+
+                "payment_type": payment.payment_type,
+
+                "amount": str(payment.amount),
+
+                "currency": "INR",
+
+                "razorpay_order_id":
+                    payment.razorpay_order_id,
+
+                "razorpay_key_id":
+                    settings.RAZORPAY_KEY_ID
+            }
+        },
+        status=status.HTTP_201_CREATED
+    )
+
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=CreateFeedbackSerializer
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_photographer_feedback(request, booking_id):
+
+    # -----------------------------------
+    # 1. GET USER BOOKING
+    # -----------------------------------
+
+    try:
+
+        booking = Booking.objects.select_related(
+            "photographer",
+            "photographer__user"
+        ).get(
+            id=booking_id,
+            user=request.user
+        )
+
+    except Booking.DoesNotExist:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Booking not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # -----------------------------------
+    # 2. CHECK PHOTOGRAPHER
+    # -----------------------------------
+
+    if not booking.photographer:
+
+        return Response(
+            {
+                "success": False,
+                "message": "No photographer is assigned to this booking."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # -----------------------------------
+    # 3. CHECK WORK COMPLETED
+    # -----------------------------------
+
+    if booking.status != "completed":
+
+        return Response(
+            {
+                "success": False,
+                "message": (
+                    "You can give feedback only after "
+                    "the photographer completes the work."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # -----------------------------------
+    # 4. CHECK ALREADY GIVEN FEEDBACK
+    # -----------------------------------
+
+    if Feedback.objects.filter(
+        booking=booking
+    ).exists():
+
+        return Response(
+            {
+                "success": False,
+                "message": (
+                    "You have already submitted feedback "
+                    "for this booking."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # -----------------------------------
+    # 5. VALIDATE DATA
+    # -----------------------------------
+
+    serializer = CreateFeedbackSerializer(
+        data=request.data
+    )
+
+    if not serializer.is_valid():
+
+        return Response(
+            {
+                "success": False,
+                "errors": serializer.errors
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # -----------------------------------
+    # 6. CREATE FEEDBACK
+    # -----------------------------------
+
+    feedback = Feedback.objects.create(
+
+        booking=booking,
+
+        user=request.user,
+
+        photographer=booking.photographer,
+
+        rating=serializer.validated_data["rating"],
+
+        comment=serializer.validated_data["comment"]
+    )
+
+    # -----------------------------------
+    # 7. RESPONSE
+    # -----------------------------------
+
+    return Response(
+        {
+            "success": True,
+            "message": "Feedback submitted successfully.",
+            "data": {
+                "feedback_id": feedback.id,
+                "booking_id": booking.id,
+                "photographer_name":
+                    booking.photographer.user.username,
+                "rating": feedback.rating,
+                "comment": feedback.comment,
+                "created_at": feedback.created_at
+            }
+        },
+        status=status.HTTP_201_CREATED
     )

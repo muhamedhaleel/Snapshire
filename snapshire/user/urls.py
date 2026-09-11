@@ -35,5 +35,22 @@ urlpatterns = [
         views.verify_razorpay_payment,
         name="verify-razorpay-payment"
     ),
+
+    path(
+    "booking/<int:booking_id>/payment-details/",
+    views.booking_payment_details,
+    name="booking-payment-details"
+),
+    path(
+    "booking/payment/balance/create/",
+    views.create_balance_payment,
+    name="create-balance-payment"
+),
+
+    path(
+    "bookings/<int:booking_id>/feedback/",
+    views.create_photographer_feedback,
+    name="create-photographer-feedback"
+),
      
 ]

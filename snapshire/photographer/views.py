@@ -33,6 +33,9 @@ from .serializers import SignupSerializer
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from django.contrib.auth.models import User
+from drf_yasg.utils import swagger_auto_schema
+from .serializers import UpdateWorkStatusSerializer
+from user.models import Booking
 
 
 
@@ -882,6 +885,7 @@ def accept_booking_request(request, booking_id):
     request_body=RejectBookingSerializer
 )
 @api_view(["POST"])
+@parser_classes([FormParser])
 @permission_classes([IsAuthenticated])
 def reject_booking_request(request, booking_id):
 
@@ -975,9 +979,21 @@ def photographer_my_bookings(request):
 
     photographer = request.user.photographer_profile
 
+    # Show photographer's booking history and current work status
     bookings = Booking.objects.filter(
-        photographer=photographer
-    ).select_related("user").order_by("-created_at")
+        photographer=photographer,
+        status__in=[
+            "photographer_accepted",
+            "work_started",
+            "in_progress",
+            "completed",
+            "photographer_rejected"
+        ]
+    ).select_related(
+        "user"
+    ).order_by(
+        "-created_at"
+    )
 
     serializer = PhotographerMyBookingSerializer(
         bookings,
@@ -989,6 +1005,147 @@ def photographer_my_bookings(request):
             "success": True,
             "count": bookings.count(),
             "results": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )
+@swagger_auto_schema(
+    method="patch",
+    request_body=UpdateWorkStatusSerializer
+)
+@api_view(["PATCH"])
+@parser_classes([FormParser])
+@permission_classes([IsAuthenticated])
+def update_work_status(request, booking_id):
+
+    # -----------------------------------
+    # 1. CHECK PHOTOGRAPHER
+    # -----------------------------------
+
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    photographer = request.user.photographer_profile
+
+    # -----------------------------------
+    # 2. GET PHOTOGRAPHER'S BOOKING
+    # -----------------------------------
+
+    try:
+        booking = Booking.objects.get(
+            id=booking_id,
+            photographer=photographer
+        )
+
+    except Booking.DoesNotExist:
+        return Response(
+            {
+                "success": False,
+                "message": "Booking not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # -----------------------------------
+    # 3. VALIDATE REQUEST DATA
+    # -----------------------------------
+
+    serializer = UpdateWorkStatusSerializer(
+        data=request.data
+    )
+
+    if not serializer.is_valid():
+        return Response(
+            {
+                "success": False,
+                "errors": serializer.errors
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    new_status = serializer.validated_data["status"]
+
+    # -----------------------------------
+    # 4. VALID STATUS TRANSITIONS
+    # -----------------------------------
+
+    allowed_transitions = {
+
+        "photographer_accepted": [
+            "work_started"
+        ],
+
+        "work_started": [
+            "in_progress"
+        ],
+
+        "in_progress": [
+            "completed"
+        ]
+    }
+
+    current_status = booking.status
+
+    # -----------------------------------
+    # 5. CHECK CURRENT STATUS
+    # -----------------------------------
+
+    if current_status not in allowed_transitions:
+        return Response(
+            {
+                "success": False,
+                "message": (
+                    f"Cannot update this booking. "
+                    f"Current status is '{current_status}'."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # -----------------------------------
+    # 6. CHECK NEXT STATUS
+    # -----------------------------------
+
+    if new_status not in allowed_transitions[current_status]:
+        return Response(
+            {
+                "success": False,
+                "message": (
+                    f"Invalid status transition from "
+                    f"'{current_status}' to '{new_status}'."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # -----------------------------------
+    # 7. UPDATE BOOKING
+    # -----------------------------------
+
+    booking.status = new_status
+
+    booking.save(
+        update_fields=["status"]
+    )
+
+    # -----------------------------------
+    # 8. SUCCESS RESPONSE
+    # -----------------------------------
+
+    return Response(
+        {
+            "success": True,
+            "message": "Work status updated successfully.",
+            "data": {
+                "booking_id": booking.id,
+                "previous_status": current_status,
+                "current_status": booking.status
+            }
         },
         status=status.HTTP_200_OK
     )

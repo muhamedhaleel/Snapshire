@@ -13,6 +13,8 @@ from django.contrib.auth.password_validation import validate_password
 import re
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password as django_validate_password
+from rest_framework import serializers
+from .models import Booking,Payment,Feedback
 
 
 
@@ -498,16 +500,61 @@ class BookingSerializer(serializers.ModelSerializer):
 
 
 
+# class UserBookingStatusSerializer(serializers.ModelSerializer):
+
+#     photographer_name = serializers.CharField(
+#         source="photographer.user.username",
+#         read_only=True
+#     )
+#     payment = serializers.SerializerMethodField()
+
+#     class Meta:
+#         model = Booking
+#         fields = [
+#             "id",
+#             "photographer_name",
+#             "location",
+#             "date",
+#             "session",
+#             "shoot_time",
+#             "status",
+#             "payment",
+            
+#         ]
+#     def get_payment(self, obj):
+
+#         advance_payment = obj.payments.filter(
+#             payment_type="advance",
+#             status="paid"
+#         ).first()
+
+#         if advance_payment:
+
+#             return {
+#                 "payment_type": advance_payment.payment_type,
+#                 "payment_status": advance_payment.status,
+#                 "advance_amount": float(advance_payment.amount),
+#                 "balance_amount": float(obj.balance_amount),
+#             }
+
+#         return {
+#             "payment_type": "advance",
+#             "payment_status": "pending",
+#             "advance_amount": float(obj.advance_amount),
+#             "balance_amount": float(obj.balance_amount),
+#         }
 class UserBookingStatusSerializer(serializers.ModelSerializer):
 
     photographer_name = serializers.CharField(
         source="photographer.user.username",
         read_only=True
     )
+
     payment = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
+
         fields = [
             "id",
             "photographer_name",
@@ -517,31 +564,76 @@ class UserBookingStatusSerializer(serializers.ModelSerializer):
             "shoot_time",
             "status",
             "payment",
-            
         ]
+
     def get_payment(self, obj):
 
+        # -----------------------------------
+        # GET ADVANCE PAYMENT
+        # -----------------------------------
+
         advance_payment = obj.payments.filter(
-            payment_type="advance",
-            status="paid"
+            payment_type="advance"
         ).first()
 
-        if advance_payment:
+        # -----------------------------------
+        # GET BALANCE PAYMENT
+        # -----------------------------------
 
-            return {
-                "payment_type": advance_payment.payment_type,
-                "payment_status": advance_payment.status,
-                "advance_amount": float(advance_payment.amount),
-                "balance_amount": float(obj.balance_amount),
-            }
+        balance_payment = obj.payments.filter(
+            payment_type="balance"
+        ).first()
+
+        # -----------------------------------
+        # ADVANCE PAYMENT STATUS
+        # -----------------------------------
+
+        advance_payment_status = "pending"
+
+        if advance_payment:
+            advance_payment_status = advance_payment.status
+
+        # -----------------------------------
+        # BALANCE PAYMENT STATUS
+        # -----------------------------------
+
+        balance_payment_status = "pending"
+
+        if balance_payment:
+            balance_payment_status = balance_payment.status
+
+        # -----------------------------------
+        # BALANCE PAYMENT AVAILABILITY
+        # -----------------------------------
+
+        balance_payment_available = False
+
+        if (
+            obj.status == "completed"
+            and advance_payment_status == "paid"
+            and balance_payment_status != "paid"
+        ):
+            balance_payment_available = True
+
+        # -----------------------------------
+        # RETURN PAYMENT DETAILS
+        # -----------------------------------
 
         return {
-            "payment_type": "advance",
-            "payment_status": "pending",
-            "advance_amount": float(obj.advance_amount),
-            "balance_amount": float(obj.balance_amount),
-        }
 
+            "advance_amount": str(obj.advance_amount),
+
+            "advance_payment_status":
+                advance_payment_status,
+
+            "balance_amount": str(obj.balance_amount),
+
+            "balance_payment_status":
+                balance_payment_status,
+
+            "balance_payment_available":
+                balance_payment_available,
+        }
 
 class NotificationSerializer(serializers.ModelSerializer):
 
@@ -612,3 +704,91 @@ class VerifyPaymentSerializer(serializers.Serializer):
         required=True,
         allow_blank=False
     )
+
+
+
+
+from rest_framework import serializers
+from .models import Booking,Payment
+
+
+class BookingPaymentDetailsSerializer(serializers.ModelSerializer):
+
+    advance_payment_status = serializers.SerializerMethodField()
+    balance_payment_status = serializers.SerializerMethodField()
+    balance_payment_available = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Booking
+
+        fields = [
+            "id",
+            "location",
+            "date",
+            "session",
+            "shoot_time",
+            "status",
+
+            "photographer_amount",
+            "advance_amount",
+            "balance_amount",
+
+            "advance_payment_status",
+            "balance_payment_status",
+
+            "balance_payment_available",
+        ]
+
+    def get_advance_payment_status(self, obj):
+
+        payment = obj.payments.filter(
+            payment_type="advance"
+        ).order_by("-created_at").first()
+
+        if payment and payment.status == "paid":
+            return "paid"
+
+        return "not_paid"
+
+    def get_balance_payment_status(self, obj):
+
+        payment = obj.payments.filter(
+            payment_type="balance"
+        ).order_by("-created_at").first()
+
+        if payment:
+            return payment.status
+
+        return "not_paid"
+
+    def get_balance_payment_available(self, obj):
+
+        return obj.status == "completed"
+
+
+
+class CreateBalancePaymentSerializer(serializers.Serializer):
+
+    booking_id = serializers.IntegerField()
+
+
+class CreateFeedbackSerializer(serializers.ModelSerializer):
+
+    class Meta:
+
+        model = Feedback
+
+        fields = [
+            "rating",
+            "comment"
+        ]
+
+    def validate_rating(self, value):
+
+        if value < 1 or value > 5:
+
+            raise serializers.ValidationError(
+                "Rating must be between 1 and 5."
+            )
+
+        return value
