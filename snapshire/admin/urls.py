@@ -71,6 +71,10 @@ urlpatterns = [
         views.set_platform_fee,
         name="set-platform-fee"
     ),
-    
+    path(
+        "dashboard/",
+        views.admin_dashboard,
+        name="admin-dashboard"
+    ),
 
 ]

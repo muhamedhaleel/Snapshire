@@ -11,7 +11,7 @@ from drf_yasg.utils import swagger_auto_schema
 
 from user.models import UserProfile,Booking
 from photographer.models import PhotographerProfile
-from .serializers import PendingPhotographerSerializer
+from .serializers import PendingPhotographerSerializer,AdminDashboardSerializer
 from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination
 from drf_yasg import openapi
@@ -542,4 +542,51 @@ def set_platform_fee(request):
             "errors": serializer.errors
         },
         status=status.HTTP_400_BAD_REQUEST
+    )
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: AdminDashboardSerializer}
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_dashboard(request):
+
+    total_users = User.objects.count()
+
+    total_photographers = PhotographerProfile.objects.count()
+
+    total_bookings = Booking.objects.count()
+
+    total_verified_photographers = PhotographerProfile.objects.filter(
+        is_verified=True
+    ).count()
+
+    total_gold_photographers = PhotographerProfile.objects.filter(
+        plan_mode="gold"
+    ).count()
+
+    total_platinum_photographers = PhotographerProfile.objects.filter(
+        plan_mode="platinum"
+    ).count()
+
+    data = {
+        "total_users": total_users,
+        "total_photographers": total_photographers,
+        "total_bookings": total_bookings,
+        "total_verified_photographers": total_verified_photographers,
+        "total_gold_photographers": total_gold_photographers,
+        "total_platinum_photographers": total_platinum_photographers,
+    }
+
+    serializer = AdminDashboardSerializer(data)
+
+    return Response(
+        {
+            "success": True,
+            "message": "Admin dashboard data retrieved successfully.",
+            "data": serializer.data
+        },
+        status=status.HTTP_200_OK
     )
