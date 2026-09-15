@@ -396,18 +396,18 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
 
+
 @swagger_auto_schema(
     method="get",
     manual_parameters=[
         openapi.Parameter(
-            "search",
-            openapi.IN_QUERY,
-            description="Search photographer by first name or last name",
+            name="search",
+            in_=openapi.IN_QUERY,
+            description="Search photographer by first name, last name, username, or email",
             type=openapi.TYPE_STRING,
             required=True,
         )
-    ],
-    responses={200: PhotographerListSerializer(many=True)}
+    ]
 )
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
@@ -416,32 +416,46 @@ def search_photographers(request):
     search = request.GET.get("search", "").strip()
 
     if not search:
-        return Response([])
+        return Response(
+            {
+                "success": False,
+                "message": "Please enter a name, username, or email."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     photographers = PhotographerProfile.objects.filter(
         Q(user__first_name__icontains=search) |
-        Q(user__last_name__icontains=search)
-    )
+        Q(user__last_name__icontains=search) |
+        Q(user__username__icontains=search) |
+        Q(user__email__icontains=search)
+    ).select_related("user")
 
     serializer = PhotographerListSerializer(
         photographers,
         many=True
     )
 
-    return Response(serializer.data)
-
-
+    return Response(
+        {
+            "success": True,
+            "message": "Photographers retrieved successfully.",
+            "count": photographers.count(),
+            "results": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )
 
 @swagger_auto_schema(
     method="get",
     manual_parameters=[
         openapi.Parameter(
-            "search",
-            openapi.IN_QUERY,
-            description="Search user by username or name",
+            name="search",
+            in_=openapi.IN_QUERY,
+            description="Search user by username, first name, last name, or email",
             type=openapi.TYPE_STRING,
             required=True,
-        ),
+        )
     ],
 )
 @api_view(["GET"])
@@ -453,25 +467,42 @@ def search_users(request):
     if not search:
         return Response(
             {
-                "error": "Please enter a username or name."
+                "success": False,
+                "message": "Please enter a username, name, or email."
             },
-            status=400
+            status=status.HTTP_400_BAD_REQUEST
         )
 
-    users = UserProfile.objects.select_related(
-        "user"
-    ).filter(
+    users = UserProfile.objects.select_related("user").filter(
+        Q(user__username__icontains=search) |
         Q(user__first_name__icontains=search) |
-        Q(user__last_name__icontains=search)
+        Q(user__last_name__icontains=search) |
+        Q(user__email__icontains=search)
     )
+
+    if not users.exists():
+        return Response(
+            {
+                "success": False,
+                "message": "User not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
 
     serializer = UserListSerializer(
         users,
         many=True
     )
 
-    return Response(serializer.data)
-
+    return Response(
+        {
+            "success": True,
+            "message": "Users retrieved successfully.",
+            "count": users.count(),
+            "results": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )
 
 @swagger_auto_schema(
     method="post",
