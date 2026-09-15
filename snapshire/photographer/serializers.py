@@ -586,3 +586,26 @@ class PhotographerDashboardSerializer(serializers.Serializer):
     )
 
     plan_mode = serializers.CharField()
+
+
+
+class PhotographerChargeSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = PhotographerCharge
+        fields = ["id", "hours", "amount"]
+
+
+
+class UpdatePhotographerChargeSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = PhotographerCharge
+        fields = ["amount"]
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError(
+                "Amount must be greater than 0."
+            )
+        return value

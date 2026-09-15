@@ -57,5 +57,18 @@ urlpatterns = [
         name="photographer-dashboard"
     ),
 
+    path(
+    "service-charges/",
+    views.view_service_charges,
+    name="view-service-charges"
+),
+
+
+    path(
+    "update-service-charges/<int:charge_id>/",
+    views.update_service_charge,
+    name="update-service-charge"
+)
+
 
     ]

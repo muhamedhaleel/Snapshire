@@ -17,7 +17,7 @@ from user.serializers import NotificationSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from .models import WeeklyAvailability, AvailabilityException,PhotographerProfile,PhotographerCharge
-from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer,RejectBookingSerializer,PhotographerMyBookingSerializer
+from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer,RejectBookingSerializer,PhotographerMyBookingSerializer,UpdatePhotographerChargeSerializer
 from datetime import date, timedelta
 import random
 from .serializers import  PhotographerVerifyOTPSerializer,PhotographerChargeSerializer,PhotographerBookingRequestSerializer
@@ -1248,6 +1248,111 @@ def photographer_dashboard(request):
             "success": True,
             "message": "Dashboard data retrieved successfully.",
             "data": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: PhotographerChargeSerializer(many=True)}
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def view_service_charges(request):
+
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    photographer = request.user.photographer_profile
+
+    charges = PhotographerCharge.objects.filter(
+        photographer=photographer
+    ).order_by("hours")
+
+    serializer = PhotographerChargeSerializer(
+        charges,
+        many=True
+    )
+
+    return Response(
+        {
+            "success": True,
+            "message": "Service charges retrieved successfully.",
+            "data": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+
+@swagger_auto_schema(
+    method="patch",
+    request_body=UpdatePhotographerChargeSerializer
+)
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
+def update_service_charge(request, charge_id):
+
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    photographer = request.user.photographer_profile
+
+    try:
+        charge = PhotographerCharge.objects.get(
+            id=charge_id,
+            photographer=photographer
+        )
+    except PhotographerCharge.DoesNotExist:
+        return Response(
+            {
+                "success": False,
+                "message": "Service charge not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    serializer = UpdatePhotographerChargeSerializer(
+        charge,
+        data=request.data,
+        partial=True
+    )
+
+    if not serializer.is_valid():
+        return Response(
+            {
+                "success": False,
+                "errors": serializer.errors
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    serializer.save()
+
+    return Response(
+        {
+            "success": True,
+            "message": "Service charge updated successfully.",
+            "data": {
+                "id": charge.id,
+                "hours": charge.hours,
+                "amount": str(charge.amount)
+            }
         },
         status=status.HTTP_200_OK
     )
