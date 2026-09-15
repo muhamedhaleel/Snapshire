@@ -51,6 +51,11 @@ urlpatterns = [
     views.update_work_status,
     name="update-work-status"
 ),
+    path(
+        "dashboard/",
+        views.photographer_dashboard,
+        name="photographer-dashboard"
+    ),
 
 
     ]

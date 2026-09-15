@@ -572,3 +572,17 @@ class UpdateWorkStatusSerializer(serializers.Serializer):
             ("completed", "Completed"),
         ]
     )
+
+
+class PhotographerDashboardSerializer(serializers.Serializer):
+
+    total_bookings = serializers.IntegerField()
+
+    completed_bookings = serializers.IntegerField()
+
+    total_earnings = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2
+    )
+
+    plan_mode = serializers.CharField()

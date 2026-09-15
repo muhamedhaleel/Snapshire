@@ -6,7 +6,7 @@ from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
 from .serializers import SignupSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import SignupSerializer, LoginSerializer,UpdatePhotographerProfileSerializer,PhotographerProfileSerializer
+from .serializers import SignupSerializer, LoginSerializer,UpdatePhotographerProfileSerializer,PhotographerProfileSerializer,PhotographerDashboardSerializer
 from rest_framework.parsers import MultiPartParser
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from drf_yasg.utils import swagger_auto_schema
@@ -36,6 +36,7 @@ from django.contrib.auth.models import User
 from drf_yasg.utils import swagger_auto_schema
 from .serializers import UpdateWorkStatusSerializer
 from user.models import Booking
+from django.db.models import Sum
 
 
 
@@ -110,11 +111,30 @@ def signup(request):
         )
 
         send_mail(
-            "Snapshire OTP Verification",
-            f"Your OTP is {otp}",
-            None,
-            [email],
-        )
+            "Snapshire - OTP Verification",
+        f"""
+        Hello,
+
+        Thank you for using Snapshire.
+
+        Your One-Time Password (OTP) for email verification is:
+
+            {otp}
+
+        This OTP is required to verify your email address and complete your registration.
+
+    Important:
+    - This OTP is valid for 5 minutes.
+    - Do not share this OTP with anyone.
+    - Snapshire will never ask you to share your OTP.
+    - If you did not request this OTP, you can safely ignore this email.
+
+    Regards
+    Snapshire Team
+""",
+None,
+[email],
+)
 
         return Response(
             {
@@ -1146,6 +1166,88 @@ def update_work_status(request, booking_id):
                 "previous_status": current_status,
                 "current_status": booking.status
             }
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={
+        200: PhotographerDashboardSerializer
+    }
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def photographer_dashboard(request):
+
+    # ---------------------------------------
+    # CHECK PHOTOGRAPHER
+    # ---------------------------------------
+
+    if not hasattr(request.user, "photographer_profile"):
+
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    photographer = request.user.photographer_profile
+
+    # ---------------------------------------
+    # GET PHOTOGRAPHER BOOKINGS
+    # ---------------------------------------
+
+    bookings = Booking.objects.filter(
+        photographer=photographer
+    )
+
+    # ---------------------------------------
+    # TOTAL BOOKINGS
+    # ---------------------------------------
+
+    total_bookings = bookings.count()
+
+    # ---------------------------------------
+    # COMPLETED BOOKINGS
+    # ---------------------------------------
+
+    completed_bookings = bookings.filter(
+        status="completed"
+    ).count()
+
+    # ---------------------------------------
+    # TOTAL EARNINGS
+    # ---------------------------------------
+
+    total_earnings = bookings.filter(
+        status="completed"
+    ).aggregate(
+        total=Sum("photographer_amount")
+    )["total"] or 0
+
+    # ---------------------------------------
+    # DASHBOARD DATA
+    # ---------------------------------------
+
+    data = {
+        "total_bookings": total_bookings,
+        "completed_bookings": completed_bookings,
+        "total_earnings": total_earnings,
+        "plan_mode": photographer.plan_mode
+    }
+
+    serializer = PhotographerDashboardSerializer(data)
+
+    return Response(
+        {
+            "success": True,
+            "message": "Dashboard data retrieved successfully.",
+            "data": serializer.data
         },
         status=status.HTTP_200_OK
     )
