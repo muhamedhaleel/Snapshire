@@ -329,6 +329,10 @@ def photographer_notifications(request):
 @permission_classes([IsAuthenticated])
 @parser_classes([FormParser])
 def create_weekly_availability(request):
+    response = check_photographer_verification(request)
+    if response:
+        return response
+     
 
     profile = request.user.photographer_profile
 
@@ -439,6 +443,9 @@ def my_weekly_availability(request):
 @permission_classes([IsAuthenticated])
 @parser_classes([FormParser])
 def update_weekly_availability(request, availability_id):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     profile = request.user.photographer_profile
 
@@ -597,6 +604,9 @@ def create_availability_exception(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_availability_exceptions(request):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     profile = request.user.photographer_profile
 
@@ -746,6 +756,9 @@ def verify_otp(request):
 @permission_classes([IsAuthenticated])
 @parser_classes([FormParser])
 def create_photographer_charge(request):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     try:
         photographer = PhotographerProfile.objects.get(
@@ -812,6 +825,9 @@ def create_photographer_charge(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def photographer_booking_requests(request):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     if not hasattr(request.user, "photographer_profile"):
         return Response(
@@ -850,6 +866,9 @@ def photographer_booking_requests(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def accept_booking_request(request, booking_id):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     if not hasattr(request.user, "photographer_profile"):
         return Response(
@@ -987,6 +1006,9 @@ def reject_booking_request(request, booking_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def photographer_my_bookings(request):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     if not hasattr(request.user, "photographer_profile"):
         return Response(
@@ -1261,6 +1283,9 @@ def photographer_dashboard(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def view_service_charges(request):
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     if not hasattr(request.user, "photographer_profile"):
         return Response(
@@ -1301,6 +1326,10 @@ def view_service_charges(request):
 @permission_classes([IsAuthenticated])
 @parser_classes([FormParser])
 def update_service_charge(request, charge_id):
+
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     if not hasattr(request.user, "photographer_profile"):
         return Response(
