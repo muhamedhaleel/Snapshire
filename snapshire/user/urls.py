@@ -48,9 +48,15 @@ urlpatterns = [
 ),
 
     path(
-    "bookings/<int:booking_id>/feedback/",
+    "bookings/<int:booking_id>/Add-feedback/",
     views.create_photographer_feedback,
     name="create-photographer-feedback"
+),
+
+    path(
+    "View-feedbacks/",
+    views.user_feedback_list,
+    name="user-feedback-list"
 ),
      
 ]

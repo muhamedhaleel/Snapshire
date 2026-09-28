@@ -13,7 +13,7 @@ from drf_yasg.utils import swagger_auto_schema
 from photographer.models import PhotographerProfile
 from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerFilterSerializer,CreatePaymentSerializer,VerifyPaymentSerializer
 from .models import Booking
-from .serializers import BookingSerializer,UserBookingStatusSerializer,VerifyOTPSerializer
+from .serializers import BookingSerializer,UserBookingStatusSerializer,VerifyOTPSerializer,UserFeedbackListSerializer
 from decimal import Decimal
 from .models import Notification
 from .serializers import NotificationSerializer,ForgotPasswordSerializer,ResetPasswordSerializer,BookingPaymentDetailsSerializer,CreateFeedbackSerializer
@@ -43,6 +43,17 @@ import razorpay
 from django.conf import settings
 
 from .models import Booking, Payment,Feedback
+
+from rest_framework.decorators import (
+    api_view,
+    permission_classes,
+    parser_classes
+)
+
+from rest_framework.parsers import (
+    FormParser,
+    MultiPartParser
+)
 
 
 
@@ -221,8 +232,14 @@ def view_photographers(request):
 
     photographers = PhotographerProfile.objects.filter(
         user__is_active=True,
-        is_verified=True
-    ).order_by("-created_at")
+        is_verified=True,
+        charges__isnull=False
+    ).select_related(
+        "user"
+    ).prefetch_related(
+        "charges"
+    ).distinct().order_by("-created_at")
+    
 
     serializer = PhotographerViewSerializer(
         photographers,
@@ -243,10 +260,11 @@ def view_photographers(request):
 def photographer_detail(request, id):
 
     try:
-        photographer = PhotographerProfile.objects.select_related("user").get(
+        photographer = PhotographerProfile.objects.select_related("user").prefetch_related("charges").get(
             id=id,
             user__is_active=True,
-            is_verified=True
+            is_verified=True,
+            charges__isnull=False
         )
 
     except PhotographerProfile.DoesNotExist:
@@ -2035,14 +2053,14 @@ def create_balance_payment(request):
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@parser_classes([FormParser, MultiPartParser])
 def create_photographer_feedback(request, booking_id):
 
-    # -----------------------------------
-    # 1. GET USER BOOKING
-    # -----------------------------------
+    
+    #  GET USER'S BOOKING
+    
 
     try:
-
         booking = Booking.objects.select_related(
             "photographer",
             "photographer__user"
@@ -2052,7 +2070,6 @@ def create_photographer_feedback(request, booking_id):
         )
 
     except Booking.DoesNotExist:
-
         return Response(
             {
                 "success": False,
@@ -2061,12 +2078,11 @@ def create_photographer_feedback(request, booking_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # -----------------------------------
-    # 2. CHECK PHOTOGRAPHER
-    # -----------------------------------
+    
+    #  CHECK PHOTOGRAPHER
+    
 
     if not booking.photographer:
-
         return Response(
             {
                 "success": False,
@@ -2080,7 +2096,6 @@ def create_photographer_feedback(request, booking_id):
     # -----------------------------------
 
     if booking.status != "completed":
-
         return Response(
             {
                 "success": False,
@@ -2097,7 +2112,8 @@ def create_photographer_feedback(request, booking_id):
     # -----------------------------------
 
     if Feedback.objects.filter(
-        booking=booking
+        booking=booking,
+        user=request.user
     ).exists():
 
         return Response(
@@ -2112,7 +2128,7 @@ def create_photographer_feedback(request, booking_id):
         )
 
     # -----------------------------------
-    # 5. VALIDATE DATA
+    # 5. VALIDATE REQUEST DATA
     # -----------------------------------
 
     serializer = CreateFeedbackSerializer(
@@ -2120,7 +2136,6 @@ def create_photographer_feedback(request, booking_id):
     )
 
     if not serializer.is_valid():
-
         return Response(
             {
                 "success": False,
@@ -2134,15 +2149,10 @@ def create_photographer_feedback(request, booking_id):
     # -----------------------------------
 
     feedback = Feedback.objects.create(
-
         booking=booking,
-
         user=request.user,
-
         photographer=booking.photographer,
-
         rating=serializer.validated_data["rating"],
-
         comment=serializer.validated_data["comment"]
     )
 
@@ -2157,12 +2167,48 @@ def create_photographer_feedback(request, booking_id):
             "data": {
                 "feedback_id": feedback.id,
                 "booking_id": booking.id,
-                "photographer_name":
-                    booking.photographer.user.username,
+                "photographer_id": booking.photographer.id,
+                "photographer_name": (
+                    f"{booking.photographer.user.first_name} "
+                    f"{booking.photographer.user.last_name}"
+                ).strip(),
                 "rating": feedback.rating,
                 "comment": feedback.comment,
                 "created_at": feedback.created_at
             }
         },
         status=status.HTTP_201_CREATED
+    )
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={
+        200: UserFeedbackListSerializer(many=True)
+    }
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def user_feedback_list(request):
+
+    feedbacks = Feedback.objects.filter(
+        user=request.user
+    ).select_related(
+        "booking",
+        "photographer",
+        "photographer__user"
+    ).order_by("-created_at")
+
+    serializer = UserFeedbackListSerializer(
+        feedbacks,
+        many=True
+    )
+
+    return Response(
+        {
+            "success": True,
+            "count": feedbacks.count(),
+            "results": serializer.data
+        },
+        status=status.HTTP_200_OK
     )

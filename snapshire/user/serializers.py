@@ -800,3 +800,38 @@ class CreateFeedbackSerializer(serializers.ModelSerializer):
             )
 
         return value
+
+
+
+
+class UserFeedbackListSerializer(serializers.ModelSerializer):
+
+    photographer_id = serializers.IntegerField(
+        source="photographer.id",
+        read_only=True
+    )
+
+    photographer_name = serializers.SerializerMethodField()
+
+    booking_id = serializers.IntegerField(
+        source="booking.id",
+        read_only=True
+    )
+
+    class Meta:
+        model = Feedback
+        fields = [
+            "id",
+            "booking_id",
+            "photographer_id",
+            "photographer_name",
+            "rating",
+            "comment",
+            "created_at",
+        ]
+
+    def get_photographer_name(self, obj):
+        return (
+            f"{obj.photographer.user.first_name} "
+            f"{obj.photographer.user.last_name}"
+        ).strip()
