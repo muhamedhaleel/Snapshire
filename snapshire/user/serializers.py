@@ -414,6 +414,10 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
     
 
 class PhotographerViewSerializer(serializers.ModelSerializer):
+    photographer_id = serializers.IntegerField(
+        source="id",
+        read_only=True
+    )
     photographer_name = serializers.SerializerMethodField()
     charges = UserPhotographerChargeSerializer(
         many=True,
@@ -423,7 +427,7 @@ class PhotographerViewSerializer(serializers.ModelSerializer):
     class Meta:
         model = PhotographerProfile
         fields = [
-            "id",
+            "photographer_id",
             "photographer_name",
             "profile_image",
             "specialty",
@@ -441,6 +445,10 @@ class PhotographerViewSerializer(serializers.ModelSerializer):
 
 
 class PhotographerDetailSerializer(serializers.ModelSerializer):
+    photographer_id = serializers.IntegerField(
+        source="id",
+        read_only=True
+    )
 
     photographer_name = serializers.SerializerMethodField()
     email = serializers.EmailField(source="user.email")
@@ -454,7 +462,7 @@ class PhotographerDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = PhotographerProfile
         fields = [
-            "id",
+            "photographer_id",
             "photographer_name",
             "email",
             "profile_image",
