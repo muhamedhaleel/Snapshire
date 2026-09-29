@@ -76,5 +76,10 @@ urlpatterns = [
         views.admin_dashboard,
         name="admin-dashboard"
     ),
+    path(
+    "User_feedback/",
+    views.admin_feedback_list,
+    name="admin-feedback-list"
+),
 
 ]

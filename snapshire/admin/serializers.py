@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from user.models import UserProfile
 from photographer.models import PhotographerProfile
-from user.models import Booking
+from user.models import Booking,Feedback
 from .models import PlatformFee
 
 class AdminLoginSerializer(serializers.Serializer):
@@ -201,5 +201,53 @@ class AdminDashboardSerializer(serializers.Serializer):
     total_gold_photographers = serializers.IntegerField()
     total_platinum_photographers = serializers.IntegerField()
 
+
+
+class AdminFeedbackSerializer(serializers.ModelSerializer):
+
+    user_id = serializers.IntegerField(
+        source="user.id",
+        read_only=True
+    )
+
+    username = serializers.CharField(
+        source="user.username",
+        read_only=True
+    )
+
+    photographer_id = serializers.IntegerField(
+        source="photographer.id",
+        read_only=True
+    )
+
+    photographer_name = serializers.SerializerMethodField()
+
+    booking_id = serializers.IntegerField(
+        source="booking.id",
+        read_only=True
+    )
+
+    class Meta:
+        model = Feedback
+        fields = [
+            "id",
+            "booking_id",
+            "user_id",
+            "username",
+            "photographer_id",
+            "photographer_name",
+            "rating",
+            "comment",
+            "created_at",
+        ]
+
+    def get_photographer_name(self, obj):
+        if not obj.photographer:
+            return ""
+
+        return (
+            f"{obj.photographer.user.first_name} "
+            f"{obj.photographer.user.last_name}"
+        ).strip()
 
 

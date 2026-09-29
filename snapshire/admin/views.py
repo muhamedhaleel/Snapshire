@@ -9,7 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from drf_yasg.utils import swagger_auto_schema
 
-from user.models import UserProfile,Booking
+from user.models import UserProfile,Booking,Feedback
 from photographer.models import PhotographerProfile
 from .serializers import PendingPhotographerSerializer,AdminDashboardSerializer
 from django.db.models import Q
@@ -20,7 +20,8 @@ from .serializers import (
     AdminLoginSerializer,
     UserListSerializer,
     PhotographerListSerializer,
-    AdminBookingManagementSerializer,PlatformFeeSerializer
+    AdminBookingManagementSerializer,PlatformFeeSerializer,
+    AdminFeedbackSerializer
 )
 
 
@@ -587,6 +588,38 @@ def admin_dashboard(request):
             "success": True,
             "message": "Admin dashboard data retrieved successfully.",
             "data": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={
+        200: AdminFeedbackSerializer(many=True)
+    }
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_feedback_list(request):
+
+    feedbacks = Feedback.objects.select_related(
+        "user",
+        "booking",
+        "photographer",
+        "photographer__user"
+    ).order_by("-created_at")
+
+    serializer = AdminFeedbackSerializer(
+        feedbacks,
+        many=True
+    )
+
+    return Response(
+        {
+            "success": True,
+            "count": feedbacks.count(),
+            "results": serializer.data
         },
         status=status.HTTP_200_OK
     )

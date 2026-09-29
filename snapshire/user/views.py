@@ -711,58 +711,141 @@ def create_booking(request):
     # Price Calculation
     # ------------------------
 
+    # hours = serializer.validated_data["hours"]
+
+    
+    # charge = PhotographerCharge.objects.filter(
+    #     photographer=photographer
+    # ).order_by("hours").first()
+
+    # if not charge:
+    #     return Response(
+    #     {
+    #         "success": False,
+    #         "message": (
+    #             "Service charge has not been configured "
+    #             "for this photographer."
+    #         )
+    #     },
+    #     status=status.HTTP_400_BAD_REQUEST
+    # )
+
+    
+
+
+    # hourly_rate = Decimal(str(charge.amount))
+
+    # # Photographer's charge for selected hours
+    # photographer_amount = hourly_rate * Decimal(str(hours))
+
+    # # Fixed platform fee
+    # fee = PlatformFee.objects.first()
+
+    # if not fee:
+    #     return Response(
+    #         {
+    #             "success": False,
+    #             "message": "Platform fee has not been configured by admin."
+    #         },
+    #         status=status.HTTP_400_BAD_REQUEST
+    #     )
+
+    # platform_fee = fee.amount
+
+    #  # Total booking amount
+    # total_amount = (
+    #     photographer_amount + platform_fee
+    # )
+
+    # # 50% advance payment
+    # advance_amount = (
+    #     total_amount / Decimal("2")
+    # )
+
+    # # Remaining 50%
+    # balance_amount = (
+    #     total_amount - advance_amount
+    # )
+    
+
     hours = serializer.validated_data["hours"]
 
-    try:
-        charge = PhotographerCharge.objects.get(
-            photographer=photographer,
-            hours=hours
-        )
-    except PhotographerCharge.DoesNotExist:
+    # -----------------------------------------
+    # GET PHOTOGRAPHER HOURLY CHARGE
+    # -----------------------------------------
+
+    charge = PhotographerCharge.objects.filter(
+        photographer=photographer
+    ).order_by("hours").first()
+
+    if not charge:
         return Response(
             {
-                "error": (
-                    f"Price for {hours} hour(s) "
-                    "is not available for this photographer."
+                "success": False,
+                "message": (
+                    "Service charge has not been configured "
+                    "for this photographer."
                 )
             },
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Photographer's charge for selected hours
-    photographer_amount = charge.amount
+    hourly_rate = Decimal(str(charge.amount))
 
-    # Fixed platform fee
+    # Photographer charge based on selected hours
+    photographer_amount = (
+        hourly_rate * Decimal(str(hours))
+    )
+
+    # -----------------------------------------
+    # GET PLATFORM FEE
+    # -----------------------------------------
+
     fee = PlatformFee.objects.first()
 
     if not fee:
         return Response(
             {
                 "success": False,
-                "message": "Platform fee has not been configured by admin."
+                "message": (
+                    "Platform fee has not been configured "
+                    "by admin."
+                )
             },
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    platform_fee = fee.amount
+    platform_fee = Decimal(str(fee.amount))
 
-     # Total booking amount
+    # -----------------------------------------
+    # TOTAL BOOKING AMOUNT
+    # -----------------------------------------
+
     total_amount = (
         photographer_amount + platform_fee
     )
 
-    # 50% advance payment
+    # -----------------------------------------
+    # PAYMENT CALCULATION
+    # -----------------------------------------
+
+    # 50% of photographer amount
+    photographer_advance = (
+        photographer_amount / Decimal("2")
+    )
+
+    # Remaining 50% of photographer amount
+    photographer_balance = (
+        photographer_amount - photographer_advance
+    )
+
+    # Full platform fee is collected initially
     advance_amount = (
-        total_amount / Decimal("2")
+        photographer_advance + platform_fee
     )
 
-    # Remaining 50%
-    balance_amount = (
-        total_amount - advance_amount
-    )
-    
-
-    
+    # Only remaining photographer amount is paid later
+    balance_amount = photographer_balance
 
     # ------------------------
     # Create Booking
