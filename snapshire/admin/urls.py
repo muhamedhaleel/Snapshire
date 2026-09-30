@@ -82,4 +82,12 @@ urlpatterns = [
     name="admin-feedback-list"
 ),
 
+    path(
+        "wallet/",
+        views.admin_wallet,
+        name="admin-wallet"
+    ),
+
+    
+
 ]

@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from user.models import UserProfile
 from photographer.models import PhotographerProfile
-from user.models import Booking,Feedback
+from user.models import Booking,Feedback,Payment
 from .models import PlatformFee
 
 class AdminLoginSerializer(serializers.Serializer):
@@ -249,5 +249,84 @@ class AdminFeedbackSerializer(serializers.ModelSerializer):
             f"{obj.photographer.user.first_name} "
             f"{obj.photographer.user.last_name}"
         ).strip()
+
+
+class AdminWalletTransactionSerializer(serializers.ModelSerializer):
+
+    booking_id = serializers.IntegerField(
+        source="booking.id",
+        read_only=True
+    )
+
+    user_name = serializers.SerializerMethodField()
+
+    photographer_name = serializers.SerializerMethodField()
+
+    total_amount = serializers.SerializerMethodField()
+
+    platform_fee = serializers.DecimalField(
+        source="booking.platform_fee",
+        max_digits=10,
+        decimal_places=2,
+        read_only=True
+    )
+
+    payment_status = serializers.CharField(
+        source="status",
+        read_only=True
+    )
+
+    payment_date = serializers.DateTimeField(
+        source="created_at",
+        read_only=True
+    )
+
+    class Meta:
+        model = Payment
+        fields = [
+            "booking_id",
+            "user_name",
+            "photographer_name",
+            "total_amount",
+            "platform_fee",
+            "payment_status",
+            "payment_date",
+        ]
+
+    def get_user_name(self, obj):
+
+        user = obj.booking.user
+
+        full_name = (
+            f"{user.first_name} "
+            f"{user.last_name}"
+        ).strip()
+
+        return full_name or user.username
+
+    def get_photographer_name(self, obj):
+
+        photographer = obj.booking.photographer
+
+        if not photographer:
+            return ""
+
+        user = photographer.user
+
+        full_name = (
+            f"{user.first_name} "
+            f"{user.last_name}"
+        ).strip()
+
+        return full_name or user.username
+
+    def get_total_amount(self, obj):
+
+        booking = obj.booking
+
+        return (
+            booking.photographer_amount +
+            booking.platform_fee
+        )
 
 

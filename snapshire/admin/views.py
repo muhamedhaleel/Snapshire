@@ -9,7 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from drf_yasg.utils import swagger_auto_schema
 
-from user.models import UserProfile,Booking,Feedback
+from user.models import UserProfile,Booking,Feedback,Payment
 from photographer.models import PhotographerProfile
 from .serializers import PendingPhotographerSerializer,AdminDashboardSerializer
 from django.db.models import Q
@@ -21,7 +21,7 @@ from .serializers import (
     UserListSerializer,
     PhotographerListSerializer,
     AdminBookingManagementSerializer,PlatformFeeSerializer,
-    AdminFeedbackSerializer
+    AdminFeedbackSerializer,AdminWalletTransactionSerializer
 )
 
 
@@ -623,3 +623,85 @@ def admin_feedback_list(request):
         },
         status=status.HTTP_200_OK
     )
+
+
+from decimal import Decimal
+
+from django.db.models import Sum
+
+from rest_framework.decorators import (
+    api_view,
+    permission_classes
+)
+from rest_framework.permissions import IsAdminUser
+from rest_framework.response import Response
+from rest_framework import status
+
+from drf_yasg.utils import swagger_auto_schema
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={
+        200: AdminWalletTransactionSerializer(many=True)
+    }
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_wallet(request):
+
+    # -----------------------------------------
+    # PAID ADVANCE PAYMENTS ONLY
+    # -----------------------------------------
+
+    payments = Payment.objects.filter(
+        payment_type="advance",
+        status="paid",
+        booking__platform_fee__gt=0
+    ).select_related(
+        "booking",
+        "booking__user",
+        "booking__photographer",
+        "booking__photographer__user"
+    ).order_by("-created_at")
+
+    # -----------------------------------------
+    # ADMIN WALLET
+    # ONLY PLATFORM FEES
+    # -----------------------------------------
+
+    total_balance = (
+        payments.aggregate(
+            total=Sum("booking__platform_fee")
+        )["total"]
+        or Decimal("0.00")
+    )
+
+    # -----------------------------------------
+    # SERIALIZE TRANSACTIONS
+    # -----------------------------------------
+
+    serializer = AdminWalletTransactionSerializer(
+        payments,
+        many=True
+    )
+
+    # -----------------------------------------
+    # RESPONSE
+    # -----------------------------------------
+
+    return Response(
+        {
+            "success": True,
+            "message": "Admin wallet retrieved successfully.",
+
+            "data": {
+                "total_balance": str(total_balance),
+
+                "transactions": serializer.data
+            }
+        },
+        status=status.HTTP_200_OK
+    )
+
+
