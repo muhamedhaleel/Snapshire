@@ -58,5 +58,6 @@ urlpatterns = [
     views.user_feedback_list,
     name="user-feedback-list"
 ),
+    path("add-feedback/<int:booking_id>/",views.create_photographer_feedback,name="add-feedback"),
      
 ]
