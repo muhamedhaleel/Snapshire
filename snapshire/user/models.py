@@ -113,6 +113,11 @@ class Booking(models.Model):
         null=True
     )
 
+    cancellation_reason = models.TextField(
+    blank=True,
+    null=True
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -267,4 +272,133 @@ class Feedback(models.Model):
         return (
             f"{self.photographer.user.username} "
             f"- {self.rating} stars"
+        )
+    
+from decimal import Decimal
+from django.db import models
+from django.contrib.auth.models import User
+
+
+class UserWallet(models.Model):
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="wallet"
+    )
+
+    balance = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00")
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = "User Wallet"
+        verbose_name_plural = "User Wallets"
+
+    def __str__(self):
+        return f"{self.user.username} - ₹{self.balance}"
+    
+
+class WalletTransaction(models.Model):
+
+    TRANSACTION_REFUND = "refund"
+
+    TRANSACTION_TYPES = [
+        (
+            TRANSACTION_REFUND,
+            "Refund"
+        ),
+    ]
+
+    STATUS_PENDING = "pending"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+
+    STATUS_CHOICES = [
+        (
+            STATUS_PENDING,
+            "Pending"
+        ),
+        (
+            STATUS_COMPLETED,
+            "Completed"
+        ),
+        (
+            STATUS_FAILED,
+            "Failed"
+        ),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="wallet_transactions"
+    )
+
+    wallet = models.ForeignKey(
+        UserWallet,
+        on_delete=models.CASCADE,
+        related_name="transactions"
+    )
+
+    booking = models.ForeignKey(
+        "Booking",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="wallet_transactions"
+    )
+
+    payment = models.ForeignKey(
+        "Payment",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="wallet_transactions"
+    )
+
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2
+    )
+
+    transaction_type = models.CharField(
+        max_length=20,
+        choices=TRANSACTION_TYPES
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING
+    )
+
+    description = models.CharField(
+        max_length=255,
+        blank=True,
+        default=""
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return (
+            f"{self.user.username} - "
+            f"{self.transaction_type} - "
+            f"₹{self.amount}"
         )

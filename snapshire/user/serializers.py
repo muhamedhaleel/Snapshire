@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import UserProfile 
+from .models import UserProfile,UserWallet,WalletTransaction
 from photographer.models import PhotographerProfile
 from photographer.serializers import PhotographerChargeSerializer
 from django.contrib.auth import authenticate
@@ -835,3 +835,90 @@ class UserFeedbackListSerializer(serializers.ModelSerializer):
             f"{obj.photographer.user.first_name} "
             f"{obj.photographer.user.last_name}"
         ).strip()
+
+
+
+class CancelBookingSerializer(serializers.Serializer):
+
+    booking_id = serializers.IntegerField()
+
+    booking_status = serializers.CharField()
+
+    photographer_status = serializers.CharField()
+
+    booking_created_at = serializers.DateTimeField()
+
+    refund_deadline = serializers.DateTimeField()
+
+    hours_remaining = serializers.FloatField()
+
+    advance_paid = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2
+    )
+
+    platform_fee = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2
+    )
+
+    refund_amount = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2
+    )
+
+    refund_status = serializers.CharField()
+
+    wallet_balance = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        required=False,
+        allow_null=True
+    )
+
+    cancellation_reason = serializers.CharField()
+
+
+
+
+class UserWalletSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = UserWallet
+        fields = [
+            "id",
+            "balance",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class WalletTransactionSerializer(serializers.ModelSerializer):
+
+    booking_id = serializers.IntegerField(
+        source="booking.id",
+        read_only=True,
+        allow_null=True
+    )
+
+    class Meta:
+        model = WalletTransaction
+
+        fields = [
+            "id",
+            "booking_id",
+            "amount",
+            "transaction_type",
+            "status",
+            "description",
+            "created_at",
+        ]
+
+
+class CancelBookingRequestSerializer(serializers.Serializer):
+
+    cancellation_reason = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        max_length=500
+    )

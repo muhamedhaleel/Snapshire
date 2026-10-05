@@ -59,5 +59,8 @@ urlpatterns = [
     name="user-feedback-list"
 ),
     path("add-feedback/<int:booking_id>/",views.create_photographer_feedback,name="add-feedback"),
+
+    path("wallet/",views.user_wallet,name="user-wallet"),
+    path("wallet/transactions/",views.wallet_transactions,name="wallet-transactions"),
      
 ]

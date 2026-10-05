@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from rest_framework.permissions import IsAuthenticated
 
 from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes, permission_classes
@@ -21,7 +22,8 @@ from .serializers import (
     UserListSerializer,
     PhotographerListSerializer,
     AdminBookingManagementSerializer,PlatformFeeSerializer,
-    AdminFeedbackSerializer,AdminWalletTransactionSerializer
+    AdminFeedbackSerializer,AdminWalletTransactionSerializer,
+    AdminCancelledBookingSerializer
 )
 
 
@@ -704,4 +706,78 @@ def admin_wallet(request):
         status=status.HTTP_200_OK
     )
 
+
+
+
+class AdminCancelledBookingPagination(PageNumberPagination):
+
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 50
+
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={
+        200: AdminCancelledBookingSerializer(many=True)
+    }
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def admin_cancelled_bookings(request):
+
+    # ---------------------------------------------
+    # Admin check
+    # ---------------------------------------------
+
+    if not request.user.is_staff:
+        return Response(
+            {
+                "success": False,
+                "message": "Admin access required."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # ---------------------------------------------
+    # Get cancelled bookings
+    # ---------------------------------------------
+
+    bookings = Booking.objects.filter(
+        status="cancelled"
+    ).select_related(
+        "user",
+        "photographer",
+        "photographer__user"
+    ).order_by(
+        "-created_at"
+    )
+
+    # ---------------------------------------------
+    # Pagination
+    # ---------------------------------------------
+
+    paginator = AdminCancelledBookingPagination()
+
+    page = paginator.paginate_queryset(
+        bookings,
+        request
+    )
+
+    serializer = AdminCancelledBookingSerializer(
+        page,
+        many=True
+    )
+
+    return Response(
+        {
+            "success": True,
+            "count": bookings.count(),
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
+            "results": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )
 

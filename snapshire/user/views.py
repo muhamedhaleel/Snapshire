@@ -4,15 +4,15 @@ from rest_framework.decorators import api_view,parser_classes,permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import SignupSerializer, LoginSerializer,UpdateProfileSerializer,CreateBalancePaymentSerializer
+from .serializers import SignupSerializer, LoginSerializer,UpdateProfileSerializer,CreateBalancePaymentSerializer,UserWalletSerializer,WalletTransactionSerializer,CancelBookingRequestSerializer
 from .models import UserProfile
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.parsers import FormParser
 from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
 from photographer.models import PhotographerProfile
-from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerFilterSerializer,CreatePaymentSerializer,VerifyPaymentSerializer
-from .models import Booking
+from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerFilterSerializer,CreatePaymentSerializer,VerifyPaymentSerializer,CancelBookingSerializer
+from .models import Booking,UserWallet,WalletTransaction
 from .serializers import BookingSerializer,UserBookingStatusSerializer,VerifyOTPSerializer,UserFeedbackListSerializer
 from decimal import Decimal
 from .models import Notification
@@ -1170,23 +1170,115 @@ def verify_otp(request):
     )
 
 
-from rest_framework.decorators import api_view, permission_classes
+# from rest_framework.decorators import api_view, permission_classes
+# from rest_framework.permissions import IsAuthenticated
+# from rest_framework.response import Response
+# from rest_framework import status
+
+
+# @api_view(["POST"])
+# @permission_classes([IsAuthenticated])
+# def cancel_booking(request, booking_id):
+
+#     try:
+#         booking = Booking.objects.get(
+#             id=booking_id,
+#             user=request.user
+#         )
+
+#     except Booking.DoesNotExist:
+#         return Response(
+#             {
+#                 "success": False,
+#                 "message": "Booking not found."
+#             },
+#             status=status.HTTP_404_NOT_FOUND
+#         )
+
+#     # Cancellation allowed only before payment
+#     if booking.status != "payment_pending":
+#         return Response(
+#             {
+#                 "success": False,
+#                 "message": "Booking cannot be cancelled at this stage."
+#             },
+#             status=status.HTTP_400_BAD_REQUEST
+#         )
+
+#     booking.status = "cancelled"
+#     booking.save(update_fields=["status"])
+
+#     return Response(
+#         {
+#             "success": True,
+#             "message": "Booking cancelled successfully."
+#         },
+#         status=status.HTTP_200_OK
+#     )
+
+from decimal import Decimal
+from datetime import timedelta
+
+from django.db import transaction
+from django.utils import timezone
+
+from rest_framework.decorators import (
+    api_view,
+    permission_classes
+)
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
+from drf_yasg.utils import swagger_auto_schema
 
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=CancelBookingRequestSerializer,
+    responses={
+        200: CancelBookingSerializer
+    }
+)
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
 def cancel_booking(request, booking_id):
 
+
+    #---------------------------------------------
+    # 1. Validate cancellation reason
+    # ---------------------------------------------
+
+    serializer = CancelBookingRequestSerializer(
+        data=request.data
+    )
+
+    serializer.is_valid(
+        raise_exception=True
+    )
+
+    cancellation_reason = serializer.validated_data[
+        "cancellation_reason"
+    ]
+
+    # ==================================================
+    # 1. GET BOOKING
+    # ==================================================
+
     try:
-        booking = Booking.objects.get(
+
+        booking = Booking.objects.select_related(
+            "photographer",
+            "photographer__user"
+        ).get(
             id=booking_id,
             user=request.user
         )
 
     except Booking.DoesNotExist:
+
         return Response(
             {
                 "success": False,
@@ -1195,28 +1287,386 @@ def cancel_booking(request, booking_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # Cancellation allowed only before payment
-    if booking.status != "payment_pending":
+    # ==================================================
+    # 2. SAVE ORIGINAL STATUS
+    # ==================================================
+
+    original_status = booking.status
+
+    # ==================================================
+    # 3. ALREADY CANCELLED
+    # ==================================================
+
+    if booking.status == "cancelled":
+
         return Response(
             {
                 "success": False,
-                "message": "Booking cannot be cancelled at this stage."
+                "message": "Booking is already cancelled."
             },
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    booking.status = "cancelled"
-    booking.save(update_fields=["status"])
+    # ==================================================
+    # 4. COMPLETED BOOKING
+    # ==================================================
+
+    if booking.status == "completed":
+
+        return Response(
+            {
+                "success": False,
+                "message": "Completed bookings cannot be cancelled."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # ==================================================
+    # 5. PAYMENT NOT COMPLETED
+    # ==================================================
+
+    if booking.status == "payment_pending":
+
+        booking.status = "cancelled"
+        booking.cancellation_reason = cancellation_reason
+
+
+        booking.save(
+            update_fields=[
+                "status",
+                "cancellation_reason"
+            ]
+        )
+
+        return Response(
+            {
+                "success": True,
+                "message": "Booking cancelled successfully.",
+                "data": {
+                    "booking_id": booking.id,
+                    "booking_status": booking.status,
+                    "photographer_status": original_status,
+                    "advance_paid": "0.00",
+                    "platform_fee": "0.00",
+                    "refund_amount": "0.00",
+                    "refund_status": "not_applicable"
+                }
+            },
+            status=status.HTTP_200_OK
+        )
+
+    # ==================================================
+    # 6. FIND PAID ADVANCE PAYMENT
+    # ==================================================
+
+    advance_payment = Payment.objects.filter(
+        booking=booking,
+        payment_type="advance",
+        status="paid"
+    ).first()
+
+    if not advance_payment:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Paid advance payment was not found."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # ==================================================
+    # 7. CHECK CREATED TIME
+    # ==================================================
+
+    if not booking.created_at:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Booking creation time is not available."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # ==================================================
+    # 8. CALCULATE 24-HOUR REFUND WINDOW
+    # ==================================================
+
+    now = timezone.now()
+
+    refund_deadline = (
+        booking.created_at +
+        timedelta(hours=24)
+    )
+
+    refund_allowed = (
+        now <= refund_deadline
+    )
+
+    # ==================================================
+    # 9. HOURS REMAINING
+    # ==================================================
+
+    remaining_seconds = (
+        refund_deadline - now
+    ).total_seconds()
+
+    hours_remaining = max(
+        remaining_seconds / 3600,
+        0
+    )
+
+    # ==================================================
+    # 10. PAYMENT AMOUNTS
+    # ==================================================
+
+    advance_paid = Decimal(
+        str(advance_payment.amount)
+    )
+
+    platform_fee = Decimal(
+        str(booking.platform_fee)
+    )
+
+    # ==================================================
+    # 11. CALCULATE REFUND
+    # ==================================================
+
+    if refund_allowed:
+
+        # Platform fee is NOT refundable
+
+        refund_amount = (
+            advance_paid - platform_fee
+        )
+
+        if refund_amount < Decimal("0.00"):
+
+            refund_amount = Decimal("0.00")
+
+        refund_status = "refunded"
+
+    else:
+
+        refund_amount = Decimal("0.00")
+
+        refund_status = "not_refundable"
+
+    # ==================================================
+    # 12. DATABASE TRANSACTION
+    # ==================================================
+
+    with transaction.atomic():
+
+    # Lock the payment row
+        advance_payment = Payment.objects.select_for_update().get(
+            id=advance_payment.id
+    )
+
+    # Cancel booking and save cancellation reason
+        booking.status = "cancelled"
+        booking.cancellation_reason = cancellation_reason
+
+        booking.save(
+            update_fields=[
+                "status",
+                "cancellation_reason"
+            ]
+    )
+
+    
+
+        # ----------------------------------------------
+        # Prevent duplicate refund
+        # ----------------------------------------------
+
+        already_refunded = WalletTransaction.objects.filter(
+            payment=advance_payment,
+            transaction_type="refund",
+            status="completed"
+        ).exists()
+
+        if already_refunded:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": "Refund has already been processed."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ----------------------------------------------
+        # Cancel booking
+        # ----------------------------------------------
+
+        booking.status = "cancelled"
+        booking.cancellation_reason = cancellation_reason
+
+        booking.save(
+            update_fields=[
+                "status",
+                "cancellation_reason"
+            ]
+        )
+
+        # ==============================================
+        # ELIGIBLE REFUND
+        # ==============================================
+
+        if refund_allowed and refund_amount > Decimal("0.00"):
+
+            # ------------------------------------------
+            # Get/Create User Wallet
+            # ------------------------------------------
+
+            wallet, created = UserWallet.objects.get_or_create(
+                user=request.user
+            )
+
+            # Lock wallet
+            wallet = UserWallet.objects.select_for_update().get(
+                id=wallet.id
+            )
+
+            # ------------------------------------------
+            # Add refund to wallet
+            # ------------------------------------------
+
+            wallet.balance = (
+                wallet.balance +
+                refund_amount
+            )
+
+            wallet.save(
+                update_fields=[
+                    "balance",
+                    "updated_at"
+                ]
+            )
+
+            # ------------------------------------------
+            # Create wallet transaction
+            # ------------------------------------------
+
+            WalletTransaction.objects.create(
+
+                user=request.user,
+                 wallet=wallet,
+
+                booking=booking,
+
+                payment=advance_payment,
+
+                amount=refund_amount,
+
+                transaction_type="refund",
+
+                status="completed",
+
+                description=(
+                    f"Refund for cancelled booking "
+                    f"#{booking.id}"
+                )
+            )
+
+            # ------------------------------------------
+            # Payment becomes refunded
+            # ------------------------------------------
+
+            advance_payment.status = "refunded"
+
+            advance_payment.save(
+                update_fields=["status"]
+            )
+
+        # ==============================================
+        # NO REFUND AFTER 24 HOURS
+        # ==============================================
+
+        else:
+
+            # No wallet transaction
+
+            # Payment remains paid
+
+            wallet = UserWallet.objects.filter(
+                user=request.user
+            ).first()
+
+    # ==================================================
+    # 13. MESSAGE
+    # ==================================================
+
+    if refund_allowed:
+
+        message = (
+            "Booking cancelled successfully. "
+            "Refund credited to your wallet. "
+            "The platform fee is non-refundable."
+        )
+
+    else:
+
+        message = (
+            "Booking cancelled successfully. "
+            "The 24-hour refund period has expired, "
+            "so no refund is available."
+        )
+
+    # ==================================================
+    # 14. RESPONSE DATA
+    # ==================================================
+
+    data = {
+        "booking_id": booking.id,
+
+        "booking_status": booking.status,
+
+        "photographer_status": original_status,
+
+        "booking_created_at": booking.created_at,
+
+        "refund_deadline": refund_deadline,
+        "cancellation_reason": booking.cancellation_reason,
+
+        "hours_remaining": round(
+            hours_remaining,
+            2
+        ),
+
+        "advance_paid": advance_paid,
+
+        "platform_fee": platform_fee,
+
+        "refund_amount": refund_amount,
+
+        "refund_status": refund_status,
+
+        "wallet_balance": (
+            wallet.balance
+            if refund_allowed and wallet
+            else None
+        )
+    }
+
+    serializer = CancelBookingSerializer(
+        data=data
+    )
+
+    serializer.is_valid(
+        raise_exception=True
+    )
 
     return Response(
         {
             "success": True,
-            "message": "Booking cancelled successfully."
+            "message": message,
+            "data": serializer.data
         },
         status=status.HTTP_200_OK
     )
-
-
 
 @swagger_auto_schema(
     method="post",
@@ -2291,6 +2741,134 @@ def user_feedback_list(request):
         {
             "success": True,
             "count": feedbacks.count(),
+            "results": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={
+        200: UserWalletSerializer
+    }
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def user_wallet(request):
+
+    wallet, created = UserWallet.objects.get_or_create(
+        user=request.user
+    )
+
+    serializer = UserWalletSerializer(wallet)
+
+    return Response(
+        {
+            "success": True,
+            "message": "Wallet retrieved successfully.",
+            "data": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )
+
+from rest_framework.pagination import PageNumberPagination
+
+
+class WalletTransactionPagination(PageNumberPagination):
+
+    page_size = 10
+
+    page_size_query_param = "page_size"
+
+    max_page_size = 50
+
+@swagger_auto_schema(
+    method="get",
+    responses={
+        200: WalletTransactionSerializer(many=True)
+    }
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def wallet_transactions(request):
+
+    # ---------------------------------------------
+    # 1. Get user's wallet
+    # ---------------------------------------------
+
+    wallet = UserWallet.objects.filter(
+        user=request.user
+    ).first()
+
+    # ---------------------------------------------
+    # 2. Wallet does not exist
+    # ---------------------------------------------
+
+    if not wallet:
+
+        return Response(
+            {
+                "success": True,
+                "message": "Wallet has no transactions.",
+                "count": 0,
+                "next": None,
+                "previous": None,
+                "results": []
+            },
+            status=status.HTTP_200_OK
+        )
+
+    # ---------------------------------------------
+    # 3. Get only this wallet's transactions
+    # ---------------------------------------------
+
+    transactions = WalletTransaction.objects.filter(
+        wallet=wallet,
+        user=request.user
+    ).select_related(
+        "booking",
+        "payment"
+    ).order_by(
+        "-created_at"
+    )
+
+    # ---------------------------------------------
+    # 4. Pagination
+    # ---------------------------------------------
+
+    paginator = PageNumberPagination()
+
+    paginator.page_size = 10
+
+    result_page = paginator.paginate_queryset(
+        transactions,
+        request
+    )
+
+    # ---------------------------------------------
+    # 5. Serialize
+    # ---------------------------------------------
+
+    serializer = WalletTransactionSerializer(
+        result_page,
+        many=True
+    )
+
+    # ---------------------------------------------
+    # 6. Response
+    # ---------------------------------------------
+
+    return Response(
+        {
+            "success": True,
+            "message": (
+                "Wallet transactions retrieved successfully."
+            ),
+            "count": transactions.count(),
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
             "results": serializer.data
         },
         status=status.HTTP_200_OK

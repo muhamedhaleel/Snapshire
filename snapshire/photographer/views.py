@@ -999,6 +999,9 @@ def reject_booking_request(request, booking_id):
         status=status.HTTP_200_OK
     )
 
+
+
+
 @swagger_auto_schema(
     method="get",
     responses={200: PhotographerMyBookingSerializer(many=True)}
@@ -1029,7 +1032,8 @@ def photographer_my_bookings(request):
             "work_started",
             "in_progress",
             "completed",
-            "photographer_rejected"
+            "photographer_rejected",
+             "cancelled"
         ]
     ).select_related(
         "user"

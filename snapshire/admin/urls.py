@@ -88,6 +88,12 @@ urlpatterns = [
         name="admin-wallet"
     ),
 
+    path(
+        "admin/cancelled-bookings/",
+        views.admin_cancelled_bookings,
+        name="admin-cancelled-bookings"
+    )
+
     
 
 ]
