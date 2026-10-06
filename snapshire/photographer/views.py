@@ -6,7 +6,7 @@ from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
 from .serializers import SignupSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import SignupSerializer, LoginSerializer,UpdatePhotographerProfileSerializer,PhotographerProfileSerializer,PhotographerDashboardSerializer
+from .serializers import SignupSerializer, LoginSerializer,UpdatePhotographerProfileSerializer,PhotographerProfileSerializer,PhotographerDashboardSerializer,PhotographerWalletTransactionSerializer
 from rest_framework.parsers import MultiPartParser
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from drf_yasg.utils import swagger_auto_schema
@@ -16,8 +16,8 @@ from user.models import Notification
 from user.serializers import NotificationSerializer
 from rest_framework.response import Response
 from rest_framework import status
-from .models import WeeklyAvailability, AvailabilityException,PhotographerProfile,PhotographerCharge
-from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer,RejectBookingSerializer,PhotographerMyBookingSerializer,UpdatePhotographerChargeSerializer
+from .models import WeeklyAvailability, AvailabilityException,PhotographerProfile,PhotographerCharge,PhotographerWalletTransaction,PhotographerWallet
+from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer,RejectBookingSerializer,PhotographerMyBookingSerializer,UpdatePhotographerChargeSerializer, PhotographerWalletSerializer
 from datetime import date, timedelta
 import random
 from .serializers import  PhotographerVerifyOTPSerializer,PhotographerChargeSerializer,PhotographerBookingRequestSerializer
@@ -28,7 +28,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import FormParser
 from rest_framework.response import Response
-from user.models import EmailOTP,Booking
+from user.models import EmailOTP,Booking,Payment
 from .serializers import SignupSerializer
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
@@ -37,7 +37,13 @@ from drf_yasg.utils import swagger_auto_schema
 from .serializers import UpdateWorkStatusSerializer
 from user.models import Booking
 from django.db.models import Sum
+from django.db import transaction
 
+from .models import (
+    PhotographerWallet,
+    PhotographerWalletTransaction,
+    
+)
 
 
 def check_photographer_verification(request):
@@ -1385,6 +1391,164 @@ def update_service_charge(request, charge_id):
                 "id": charge.id,
                 "hours": charge.hours,
                 "amount": str(charge.amount)
+            }
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: PhotographerWalletSerializer}
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def photographer_wallet(request):
+
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    photographer = request.user.photographer_profile
+
+    wallet, created = PhotographerWallet.objects.get_or_create(
+        photographer=photographer
+    )
+
+    transactions = PhotographerWalletTransaction.objects.filter(
+        photographer=photographer
+    ).select_related(
+        "booking",
+        "photographer__user"
+    ).order_by("-created_at")
+
+    wallet_data = PhotographerWalletSerializer(wallet).data
+
+    transaction_data = PhotographerWalletTransactionSerializer(
+        transactions,
+        many=True
+    ).data
+
+    return Response(
+        {
+            "success": True,
+            "data": {
+                "wallet": wallet_data,
+                "transactions": transaction_data
+            }
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+
+@swagger_auto_schema(
+    method="post"
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def credit_photographer_wallet(request):
+
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    photographer = request.user.photographer_profile
+
+    wallet, created = PhotographerWallet.objects.get_or_create(
+        photographer=photographer
+    )
+
+    bookings = Booking.objects.filter(
+        photographer=photographer,
+        status="completed"
+    )
+
+    credited_bookings = []
+
+    for booking in bookings:
+
+        # Already credited
+        if PhotographerWalletTransaction.objects.filter(
+            booking=booking
+        ).exists():
+            continue
+
+        # Advance payment must be paid
+        advance_payment = Payment.objects.filter(
+            booking=booking,
+            payment_type="advance",
+            status="paid"
+        ).first()
+
+        if not advance_payment:
+            continue
+
+        # Balance payment must be paid
+        balance_payment = Payment.objects.filter(
+            booking=booking,
+            payment_type="balance",
+            status="paid"
+        ).first()
+
+        if not balance_payment:
+            continue
+
+        with transaction.atomic():
+
+            wallet = PhotographerWallet.objects.select_for_update().get(
+                id=wallet.id
+            )
+
+            # Check again to prevent duplicate credit
+            if PhotographerWalletTransaction.objects.filter(
+                booking=booking
+            ).exists():
+                continue
+
+            amount = booking.photographer_amount
+
+            wallet.balance += amount
+            wallet.save(
+                update_fields=["balance", "updated_at"]
+            )
+
+            PhotographerWalletTransaction.objects.create(
+                photographer=photographer,
+                wallet=wallet,
+                booking=booking,
+                amount=amount,
+                transaction_type="booking",
+                description=f"Earnings from completed booking #{booking.id}"
+            )
+
+            credited_bookings.append({
+                "booking_id": booking.id,
+                "amount": str(amount)
+            })
+
+    wallet.refresh_from_db()
+
+    return Response(
+        {
+            "success": True,
+            "message": "Photographer wallet credited successfully.",
+            "data": {
+                "wallet_id": wallet.id,
+                "photographer_name": photographer.user.username,
+                "balance": str(wallet.balance),
+                "credited_bookings": credited_bookings
             }
         },
         status=status.HTTP_200_OK

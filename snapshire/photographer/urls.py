@@ -68,7 +68,17 @@ urlpatterns = [
     "update-service-charges/<int:charge_id>/",
     views.update_service_charge,
     name="update-service-charge"
-)
+),
 
+    path(
+    "wallet/",
+    views.photographer_wallet,
+    name="photographer-wallet"
+),
+    path(
+    "wallet/credit/",
+    views.credit_photographer_wallet,
+    name="credit-photographer-wallet"
+)
 
     ]

@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import PhotographerProfile
+from .models import PhotographerProfile,PhotographerWallet,PhotographerWalletTransaction
 from django.contrib.auth import authenticate
 from user.models import Notification,Booking
 from.models import WeeklyAvailability,AvailabilityException,PhotographerCharge
@@ -609,3 +609,40 @@ class UpdatePhotographerChargeSerializer(serializers.ModelSerializer):
                 "Amount must be greater than 0."
             )
         return value
+
+
+
+
+class PhotographerWalletSerializer(serializers.ModelSerializer):
+    photographer_name = serializers.CharField(
+        source="photographer.user.username",
+        read_only=True
+    )
+
+    class Meta:
+        model = PhotographerWallet
+        fields = [
+            "id",
+            "photographer_name",
+            "balance",
+            "updated_at",
+        ]
+
+
+
+class PhotographerWalletTransactionSerializer(serializers.ModelSerializer):
+    booking_id = serializers.IntegerField(
+        source="booking.id",
+        read_only=True
+    )
+
+    class Meta:
+        model = PhotographerWalletTransaction
+        fields = [
+            "id",
+            "booking_id",
+            "amount",
+            "transaction_type",
+            "description",
+            "created_at",
+        ]

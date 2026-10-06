@@ -10,7 +10,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from drf_yasg.utils import swagger_auto_schema
 
-from user.models import UserProfile,Booking,Feedback,Payment
+from user.models import UserProfile,Booking,Feedback,Payment,WalletTransaction
 from photographer.models import PhotographerProfile
 from .serializers import PendingPhotographerSerializer,AdminDashboardSerializer
 from django.db.models import Q
@@ -23,7 +23,8 @@ from .serializers import (
     PhotographerListSerializer,
     AdminBookingManagementSerializer,PlatformFeeSerializer,
     AdminFeedbackSerializer,AdminWalletTransactionSerializer,
-    AdminCancelledBookingSerializer
+    AdminCancelledBookingSerializer,AdminPhotographerTransactionSerializer,
+    PhotographerWalletTransaction,AdminUserRefundTransactionSerializer
 )
 
 
@@ -781,3 +782,68 @@ def admin_cancelled_bookings(request):
         status=status.HTTP_200_OK
     )
 
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: AdminPhotographerTransactionSerializer(many=True)}
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_photographer_transactions(request):
+
+    transactions = PhotographerWalletTransaction.objects.select_related(
+        "photographer__user",
+        "booking",
+        "wallet"
+    ).order_by("-created_at")
+
+    serializer = AdminPhotographerTransactionSerializer(
+        transactions,
+        many=True
+    )
+
+    return Response(
+        {
+            "success": True,
+            "count": transactions.count(),
+            "results": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={
+        200: AdminUserRefundTransactionSerializer(many=True)
+    }
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_user_refund_transactions(request):
+
+    transactions = WalletTransaction.objects.filter(
+        transaction_type="refund"
+    ).select_related(
+        "user",
+        "wallet",
+        "booking__user",
+        "booking__photographer__user",
+        "payment"
+    ).order_by("-created_at")
+
+    serializer = AdminUserRefundTransactionSerializer(
+        transactions,
+        many=True
+    )
+
+    return Response(
+        {
+            "success": True,
+            "count": transactions.count(),
+            "results": serializer.data
+        },
+        status=status.HTTP_200_OK
+    )

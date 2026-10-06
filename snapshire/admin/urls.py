@@ -92,8 +92,18 @@ urlpatterns = [
         "admin/cancelled-bookings/",
         views.admin_cancelled_bookings,
         name="admin-cancelled-bookings"
-    )
+    ),
 
+    path(
+        "photographer-transactions-details/",
+        views.admin_photographer_transactions,
+        name="admin-photographer-transactions"
+),
+    path(
+    "user-refund-transactions-details/",
+    views.admin_user_refund_transactions,
+    name="admin-user-refund-transactions"
+    ),
     
 
 ]

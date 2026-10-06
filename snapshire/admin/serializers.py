@@ -3,8 +3,8 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from user.models import UserProfile
-from photographer.models import PhotographerProfile
-from user.models import Booking,Feedback,Payment
+from photographer.models import PhotographerProfile,PhotographerWalletTransaction
+from user.models import Booking,Feedback,Payment,WalletTransaction
 from .models import PlatformFee
 from decimal import Decimal
 
@@ -131,6 +131,8 @@ class AdminBookingManagementSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
+    total_amount = serializers.SerializerMethodField()
+
     class Meta:
         model = Booking
         fields = [
@@ -142,12 +144,20 @@ class AdminBookingManagementSerializer(serializers.ModelSerializer):
             "session",
             "shoot_time",
             "hours",
+            "photographer_amount",
+            "platform_fee",
             "total_amount",
-            
+            "advance_amount",
+            "balance_amount",
             "status",
             "created_at",
         ]
 
+    def get_total_amount(self, obj):
+        return (
+            obj.photographer_amount +
+            obj.platform_fee
+        )
 
 
 class PendingPhotographerSerializer(serializers.ModelSerializer):
@@ -467,3 +477,148 @@ class AdminCancelledBookingSerializer(serializers.ModelSerializer):
 
         return "not_refunded"
 
+
+
+
+class AdminPhotographerTransactionSerializer(serializers.ModelSerializer):
+    photographer_id = serializers.IntegerField(
+        source="photographer.id",
+        read_only=True
+    )
+    photographer_name = serializers.CharField(
+        source="photographer.user.username",
+        read_only=True
+    )
+    photographer_email = serializers.EmailField(
+        source="photographer.user.email",
+        read_only=True
+    )
+    booking_id = serializers.IntegerField(
+        source="booking.id",
+        read_only=True
+    )
+
+    class Meta:
+        model = PhotographerWalletTransaction
+        fields = [
+            "id",
+            "photographer_id",
+            "photographer_name",
+            "photographer_email",
+            "booking_id",
+            "amount",
+            "transaction_type",
+            "description",
+            "created_at",
+        ]
+
+
+class AdminUserRefundTransactionSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(
+        source="booking.user.id",
+        read_only=True
+    )
+    user_name = serializers.SerializerMethodField()
+    user_email = serializers.EmailField(
+        source="booking.user.email",
+        read_only=True
+    )
+
+    photographer_id = serializers.IntegerField(
+        source="booking.photographer.id",
+        read_only=True
+    )
+    photographer_name = serializers.CharField(
+        source="booking.photographer.user.username",
+        read_only=True
+    )
+
+    booking_id = serializers.IntegerField(
+        source="booking.id",
+        read_only=True
+    )
+
+    booking_date = serializers.DateField(
+        source="booking.date",
+        read_only=True
+    )
+    session = serializers.CharField(
+        source="booking.session",
+        read_only=True
+    )
+    location = serializers.CharField(
+        source="booking.location",
+        read_only=True
+    )
+    shoot_time = serializers.TimeField(
+        source="booking.shoot_time",
+        read_only=True
+    )
+    hours = serializers.IntegerField(
+        source="booking.hours",
+        read_only=True
+    )
+
+    photographer_amount = serializers.DecimalField(
+        source="booking.photographer_amount",
+        max_digits=12,
+        decimal_places=2,
+        read_only=True
+    )
+
+    platform_fee = serializers.DecimalField(
+        source="booking.platform_fee",
+        max_digits=12,
+        decimal_places=2,
+        read_only=True
+    )
+
+    booking_status = serializers.CharField(
+        source="booking.status",
+        read_only=True
+    )
+
+    cancellation_reason = serializers.CharField(
+        source="booking.cancellation_reason",
+        read_only=True
+    )
+
+    refund_amount = serializers.DecimalField(
+        source="amount",
+        max_digits=12,
+        decimal_places=2,
+        read_only=True
+    )
+
+    refund_status = serializers.CharField(
+        source="status",
+        read_only=True
+    )
+
+    class Meta:
+        model = WalletTransaction
+        fields = [
+            "id",
+            "user_id",
+            "user_name",
+            "user_email",
+            "photographer_id",
+            "photographer_name",
+            "booking_id",
+            "booking_date",
+            "session",
+            "location",
+            "shoot_time",
+            "hours",
+            "photographer_amount",
+            "platform_fee",
+            "refund_amount",
+            "refund_status",
+            "booking_status",
+            "cancellation_reason",
+            "created_at",
+        ]
+
+    def get_user_name(self, obj):
+        user = obj.booking.user
+        return f"{user.first_name} {user.last_name}".strip()
