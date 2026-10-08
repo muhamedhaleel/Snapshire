@@ -402,3 +402,70 @@ class WalletTransaction(models.Model):
             f"{self.transaction_type} - "
             f"₹{self.amount}"
         )
+
+
+
+
+
+class RescheduleRequest(models.Model):
+
+    STATUS_PENDING = "pending"
+    STATUS_ACCEPTED = "accepted"
+    STATUS_REJECTED = "rejected"
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_ACCEPTED, "Accepted"),
+        (STATUS_REJECTED, "Rejected"),
+    ]
+
+    SESSION_CHOICES = [
+        ("morning", "Morning"),
+        ("afternoon", "Afternoon"),
+    ]
+
+    booking = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="reschedule_requests"
+    )
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="reschedule_requests"
+    )
+
+    photographer = models.ForeignKey(
+        PhotographerProfile,
+        on_delete=models.CASCADE,
+        related_name="reschedule_requests"
+    )
+
+    old_date = models.DateField()
+    old_time = models.TimeField()
+
+    new_date = models.DateField()
+    new_time = models.TimeField()
+
+    new_session = models.CharField(
+        max_length=20,
+        choices=SESSION_CHOICES
+    )
+
+    description = models.TextField()
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    responded_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )

@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 from .models import PhotographerProfile,PhotographerWallet,PhotographerWalletTransaction
 from django.contrib.auth import authenticate
-from user.models import Notification,Booking
+from user.models import Notification,Booking,RescheduleRequest
 from.models import WeeklyAvailability,AvailabilityException,PhotographerCharge
 import re
 from django.contrib.auth.models import User
@@ -646,3 +646,46 @@ class PhotographerWalletTransactionSerializer(serializers.ModelSerializer):
             "description",
             "created_at",
         ]
+
+
+
+class PhotographerRescheduleRequestSerializer(
+    serializers.ModelSerializer
+):
+
+    photographer_name = serializers.CharField(
+        source="photographer.user.username",
+        read_only=True
+    )
+
+    user_name = serializers.CharField(
+        source="user.username",
+        read_only=True
+    )
+
+    class Meta:
+        model = RescheduleRequest
+
+        fields = [
+            "id",
+            "booking",
+            "user",
+            "user_name",
+            "photographer",
+            "photographer_name",
+
+            "old_date",
+            "old_time",
+
+            "new_date",
+            "new_time",
+            "new_session",
+
+            "description",
+
+            "status",
+            "created_at",
+            "responded_at",
+        ]
+
+        read_only_fields = fields

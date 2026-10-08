@@ -79,6 +79,24 @@ urlpatterns = [
     "wallet/credit/",
     views.credit_photographer_wallet,
     name="credit-photographer-wallet"
-)
+),
+
+    path(
+    "photographer/reschedule-requests/",
+    views.photographer_reschedule_requests,
+    name="photographer-reschedule-requests"
+),
+
+    path(
+    "photographer/reschedule/<int:reschedule_id>/accept/",
+    views.accept_reschedule,
+    name="accept-reschedule"
+),
+
+    path(
+    "photographer/reschedule/<int:reschedule_id>/reject/",
+    views.reject_reschedule,
+    name="reject-reschedule"
+),
 
     ]

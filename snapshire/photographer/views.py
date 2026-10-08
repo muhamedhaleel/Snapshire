@@ -12,7 +12,7 @@ from rest_framework.decorators import api_view, permission_classes, parser_class
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.permissions import IsAuthenticated
 from .serializers import VerificationSerializer
-from user.models import Notification
+from user.models import Notification,RescheduleRequest
 from user.serializers import NotificationSerializer
 from rest_framework.response import Response
 from rest_framework import status
@@ -20,7 +20,7 @@ from .models import WeeklyAvailability, AvailabilityException,PhotographerProfil
 from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer,RejectBookingSerializer,PhotographerMyBookingSerializer,UpdatePhotographerChargeSerializer, PhotographerWalletSerializer
 from datetime import date, timedelta
 import random
-from .serializers import  PhotographerVerifyOTPSerializer,PhotographerChargeSerializer,PhotographerBookingRequestSerializer
+from .serializers import  PhotographerVerifyOTPSerializer,PhotographerChargeSerializer,PhotographerBookingRequestSerializer,PhotographerRescheduleRequestSerializer
 
 from django.core.mail import send_mail
 from django.utils import timezone
@@ -1549,6 +1549,436 @@ def credit_photographer_wallet(request):
                 "photographer_name": photographer.user.username,
                 "balance": str(wallet.balance),
                 "credited_bookings": credited_bookings
+            }
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+
+
+
+@swagger_auto_schema(
+    method="get"
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def photographer_reschedule_requests(request):
+
+    
+    try:
+
+        photographer = PhotographerProfile.objects.get(
+            user=request.user
+        )
+
+    except PhotographerProfile.DoesNotExist:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Photographer profile not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    
+
+    requests = RescheduleRequest.objects.filter(
+        photographer=photographer
+    ).select_related(
+        "user",
+        "photographer",
+        "photographer__user",
+        "booking"
+    ).order_by(
+        "-created_at"
+    )
+
+    
+
+    data = []
+
+    for reschedule in requests:
+
+        data.append(
+            {
+                "reschedule_id": reschedule.id,
+
+                "booking_id": reschedule.booking.id,
+
+                "user_id": reschedule.user.id,
+
+                "user_name": (
+                    reschedule.user.username
+                ),
+
+                "photographer_id": (
+                    reschedule.photographer.id
+                ),
+
+                "photographer_name": (
+                    reschedule.photographer.user.username
+                ),
+
+                "old_date": reschedule.old_date,
+
+                "old_time": reschedule.old_time,
+
+                "old_session": (
+                    reschedule.booking.session
+                ),
+
+                "new_date": reschedule.new_date,
+
+                "new_time": reschedule.new_time,
+
+                "new_session": reschedule.new_session,
+
+                "description": reschedule.description,
+
+                "status": reschedule.status,
+
+                "created_at": reschedule.created_at,
+
+                "responded_at": reschedule.responded_at
+            }
+        )
+
+    
+
+    return Response(
+        {
+            "success": True,
+
+            "count": len(data),
+
+            "data": data
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+
+
+
+
+@swagger_auto_schema(
+    method="post"
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def accept_reschedule(request, reschedule_id):
+
+    
+
+    try:
+
+        photographer = PhotographerProfile.objects.get(
+            user=request.user
+        )
+
+    except PhotographerProfile.DoesNotExist:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Photographer profile not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # =================================================
+    # 2. Start transaction
+    # =================================================
+
+    with transaction.atomic():
+
+        # =================================================
+        # 3. Get reschedule request
+        # =================================================
+
+        try:
+
+            reschedule = (
+                RescheduleRequest.objects
+                .select_for_update()
+                .select_related(
+                    "booking",
+                    "user",
+                    "photographer"
+                )
+                .get(
+                    id=reschedule_id,
+                    photographer=photographer
+                )
+            )
+
+        except RescheduleRequest.DoesNotExist:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": (
+                        "Reschedule request not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        
+
+        if reschedule.status != "pending":
+
+            return Response(
+                {
+                    "success": False,
+                    "message": (
+                        "This reschedule request has "
+                        "already been responded to."
+                    ),
+                    "status": reschedule.status
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        
+
+        try:
+
+            booking = (
+                Booking.objects
+                .select_for_update()
+                .get(
+                    id=reschedule.booking.id
+                )
+            )
+
+        except Booking.DoesNotExist:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": "Booking not found."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        
+
+        ALLOWED_STATUS = [
+            "photographer_accepted",
+            "confirmed",
+        ]
+
+        if booking.status not in ALLOWED_STATUS:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": (
+                        "This booking cannot be "
+                        "rescheduled because of its "
+                        "current status."
+                    ),
+                    "booking_status": booking.status
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        
+
+        available = check_photographer_availability(
+            photographer=photographer,
+
+            selected_date=reschedule.new_date,
+
+            session=reschedule.new_session,
+
+            exclude_booking_id=booking.id
+        )
+
+        if not available:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": (
+                        "Photographer is no longer "
+                        "available for the requested "
+                        "date and session."
+                    ),
+
+                    "new_date": reschedule.new_date,
+
+                    "new_time": reschedule.new_time,
+
+                    "new_session": (
+                        reschedule.new_session
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        
+
+        booking.date = reschedule.new_date
+
+        booking.shoot_time = reschedule.new_time
+
+        booking.session = reschedule.new_session
+
+        booking.save(
+            update_fields=[
+                "date",
+                "shoot_time",
+                "session"
+            ]
+        )
+
+        
+        reschedule.status = "accepted"
+
+        reschedule.responded_at = timezone.now()
+
+        reschedule.save(
+            update_fields=[
+                "status",
+                "responded_at"
+            ]
+        )
+
+    
+    return Response(
+        {
+            "success": True,
+
+            "message": (
+                "Reschedule request accepted "
+                "successfully."
+            ),
+
+            "data": {
+
+                "reschedule_id": reschedule.id,
+
+                "booking_id": booking.id,
+
+                "status": reschedule.status,
+
+                "date": booking.date,
+
+                "shoot_time": booking.shoot_time,
+
+                "session": booking.session,
+
+                "responded_at": (
+                    reschedule.responded_at
+                )
+            }
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+
+
+
+@swagger_auto_schema(
+    method="post"
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def reject_reschedule(request, reschedule_id):
+
+    
+
+    try:
+
+        photographer = PhotographerProfile.objects.get(
+            user=request.user
+        )
+
+    except PhotographerProfile.DoesNotExist:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Photographer profile not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    
+
+    try:
+
+        reschedule = RescheduleRequest.objects.get(
+            id=reschedule_id,
+            photographer=photographer
+        )
+
+    except RescheduleRequest.DoesNotExist:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Reschedule request not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    
+
+    if reschedule.status != "pending":
+
+        return Response(
+            {
+                "success": False,
+                "message": (
+                    "This reschedule request has "
+                    "already been responded to."
+                ),
+                "status": reschedule.status
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    
+
+    reschedule.status = "rejected"
+
+    reschedule.responded_at = timezone.now()
+
+    reschedule.save(
+        update_fields=[
+            "status",
+            "responded_at"
+        ]
+    )
+
+    
+
+    return Response(
+        {
+            "success": True,
+
+            "message": (
+                "Reschedule request rejected "
+                "successfully."
+            ),
+
+            "data": {
+
+                "reschedule_id": reschedule.id,
+
+                "booking_id": reschedule.booking.id,
+
+                "status": reschedule.status,
+
+                "responded_at": (
+                    reschedule.responded_at
+                )
             }
         },
         status=status.HTTP_200_OK

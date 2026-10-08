@@ -11,11 +11,11 @@ from rest_framework.parsers import FormParser
 from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
 from photographer.models import PhotographerProfile
-from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerFilterSerializer,CreatePaymentSerializer,VerifyPaymentSerializer,CancelBookingSerializer
+from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerFilterSerializer,CreatePaymentSerializer,VerifyPaymentSerializer,CancelBookingSerializer,RescheduleRequestSerializer
 from .models import Booking,UserWallet,WalletTransaction
 from .serializers import BookingSerializer,UserBookingStatusSerializer,VerifyOTPSerializer,UserFeedbackListSerializer
 from decimal import Decimal
-from .models import Notification
+from .models import Notification,RescheduleRequest
 from .serializers import NotificationSerializer,ForgotPasswordSerializer,ResetPasswordSerializer,BookingPaymentDetailsSerializer,CreateFeedbackSerializer
 from django.db.models import Q
 from rest_framework.decorators import api_view
@@ -2872,4 +2872,395 @@ def wallet_transactions(request):
             "results": serializer.data
         },
         status=status.HTTP_200_OK
+    )
+
+def check_photographer_availability(
+    photographer,
+    selected_date,
+    session,
+    exclude_booking_id=None
+):
+
+    # ---------------------------------------------
+    # 1. Weekly availability
+    # ---------------------------------------------
+
+    weekday = selected_date.weekday()
+
+    weekly = WeeklyAvailability.objects.filter(
+        photographer=photographer,
+        weekday=weekday
+    ).first()
+
+    if not weekly:
+        return False
+
+    # ---------------------------------------------
+    # 2. Check morning / afternoon
+    # ---------------------------------------------
+
+    if session == "morning":
+
+        available = weekly.morning
+
+    elif session == "afternoon":
+
+        available = weekly.afternoon
+
+    else:
+
+        return False
+
+    if not available:
+        return False
+
+    # ---------------------------------------------
+    # 3. Check exceptions
+    # ---------------------------------------------
+
+    exceptions = AvailabilityException.objects.filter(
+        photographer=photographer,
+        date=selected_date
+    )
+
+    for exception in exceptions:
+
+        if exception.session == "full_day":
+            return False
+
+        if exception.session == session:
+            return False
+
+    # ---------------------------------------------
+    # 4. Check existing bookings
+    # ---------------------------------------------
+
+    ACTIVE_STATUS = [
+        "payment_pending",
+        "waiting_photographer",
+        "photographer_accepted",
+        "waiting_admin",
+        "confirmed",
+        "completed",
+    ]
+
+    bookings = Booking.objects.filter(
+        photographer=photographer,
+        date=selected_date,
+        session=session,
+        status__in=ACTIVE_STATUS
+    )
+
+    # Don't count the booking being rescheduled
+    if exclude_booking_id:
+
+        bookings = bookings.exclude(
+            id=exclude_booking_id
+        )
+
+    if bookings.exists():
+        return False
+
+    return True
+
+
+# =================================================
+# REQUEST RESCHEDULE
+# =================================================
+
+@swagger_auto_schema(
+    method="post",
+    request_body=RescheduleRequestSerializer
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
+def request_reschedule(request):
+
+    # =================================================
+    # 1. Validate request
+    # =================================================
+
+    serializer = RescheduleRequestSerializer(
+        data=request.data
+    )
+
+    if not serializer.is_valid():
+
+        return Response(
+            {
+                "success": False,
+                "errors": serializer.errors
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    booking_id = serializer.validated_data["booking_id"]
+
+    new_date = serializer.validated_data["new_date"]
+
+    new_time = serializer.validated_data["new_time"]
+
+    new_session = serializer.validated_data["new_session"]
+
+    description = serializer.validated_data["description"]
+
+    # =================================================
+    # 2. Get user's booking
+    # =================================================
+
+    try:
+
+        booking = Booking.objects.select_related(
+            "photographer",
+            "photographer__user"
+        ).get(
+            id=booking_id,
+            user=request.user
+        )
+
+    except Booking.DoesNotExist:
+
+        return Response(
+            {
+                "success": False,
+                "message": "Booking not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    photographer = booking.photographer
+
+    # =================================================
+    # 3. Check booking status
+    # =================================================
+
+    ALLOWED_STATUS = [
+        "photographer_accepted",
+        "confirmed",
+    ]
+
+    if booking.status not in ALLOWED_STATUS:
+
+        return Response(
+            {
+                "success": False,
+                "message": (
+                    "This booking cannot be rescheduled "
+                    "because of its current status."
+                ),
+                "booking_status": booking.status
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # =================================================
+    # 4. Calculate original booking datetime
+    # =================================================
+
+    booking_datetime = timezone.make_aware(
+        datetime.combine(
+            booking.date,
+            booking.shoot_time
+        ),
+        timezone.get_current_timezone()
+    )
+
+    # =================================================
+    # 5. Check 5-hour deadline
+    # =================================================
+
+    reschedule_deadline = (
+        booking_datetime - timedelta(hours=5)
+    )
+
+    now = timezone.now()
+
+    if now >= reschedule_deadline:
+
+        return Response(
+            {
+                "success": False,
+                "message": (
+                    "Rescheduling is not possible. "
+                    "You must request rescheduling "
+                    "at least 5 hours before the "
+                    "booked time."
+                ),
+                "booking_date": booking.date,
+                "booking_time": booking.shoot_time,
+                "reschedule_deadline": reschedule_deadline
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # =================================================
+    # 6. Check new datetime
+    # =================================================
+
+    new_datetime = timezone.make_aware(
+        datetime.combine(
+            new_date,
+            new_time
+        ),
+        timezone.get_current_timezone()
+    )
+
+    if new_datetime <= now:
+
+        return Response(
+            {
+                "success": False,
+                "message": (
+                    "The new date and time must "
+                    "be in the future."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # =================================================
+    # 7. New date/time/session cannot be same
+    # =================================================
+
+    if (
+        new_date == booking.date
+        and
+        new_time == booking.shoot_time
+        and
+        new_session == booking.session
+    ):
+
+        return Response(
+            {
+                "success": False,
+                "message": (
+                    "The new date, time and session "
+                    "must be different from the "
+                    "current booking."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # =================================================
+    # 8. Check pending request
+    # =================================================
+
+    pending_request = RescheduleRequest.objects.filter(
+        booking=booking,
+        status="pending"
+    ).exists()
+
+    if pending_request:
+
+        return Response(
+            {
+                "success": False,
+                "message": (
+                    "A rescheduling request is already "
+                    "pending for this booking."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # =================================================
+    # 9. Check photographer availability
+    # =================================================
+
+    available = check_photographer_availability(
+        photographer=photographer,
+        selected_date=new_date,
+        session=new_session,
+        exclude_booking_id=booking.id
+    )
+
+    if not available:
+
+        return Response(
+            {
+                "success": False,
+                "message": (
+                    "Photographer is not available "
+                    "for the selected date and session."
+                ),
+                "new_date": new_date,
+                "new_time": new_time,
+                "new_session": new_session
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # =================================================
+    # 10. Create reschedule request
+    # =================================================
+
+    reschedule = RescheduleRequest.objects.create(
+        booking=booking,
+        user=request.user,
+        photographer=photographer,
+
+        old_date=booking.date,
+        old_time=booking.shoot_time,
+
+        new_date=new_date,
+        new_time=new_time,
+        new_session=new_session,
+
+        description=description,
+
+        status="pending"
+    )
+
+    # =================================================
+    # 11. Response
+    # =================================================
+
+    return Response(
+        {
+            "success": True,
+            "message": (
+                "Rescheduling request submitted "
+                "successfully. Waiting for "
+                "photographer approval."
+            ),
+            "data": {
+
+                "reschedule_id": reschedule.id,
+
+                "booking_id": booking.id,
+
+                "photographer_id": photographer.id,
+
+                "photographer_name": (
+                    photographer.user.username
+                ),
+
+                "old_date": reschedule.old_date,
+
+                "old_time": reschedule.old_time,
+
+                "old_session": booking.session,
+
+                "new_date": reschedule.new_date,
+
+                "new_time": reschedule.new_time,
+
+                "new_session": reschedule.new_session,
+
+                "description": reschedule.description,
+
+                "status": reschedule.status,
+
+                "reschedule_deadline": (
+                    reschedule_deadline
+                ),
+
+                "created_at": (
+                    reschedule.created_at
+                )
+            }
+        },
+        status=status.HTTP_201_CREATED
     )

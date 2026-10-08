@@ -922,3 +922,24 @@ class CancelBookingRequestSerializer(serializers.Serializer):
         allow_blank=False,
         max_length=500
     )
+
+
+class RescheduleRequestSerializer(serializers.Serializer):
+
+    booking_id = serializers.IntegerField()
+
+    new_date = serializers.DateField()
+
+    new_time = serializers.TimeField()
+
+    new_session = serializers.ChoiceField(
+        choices=[
+            ("morning", "Morning"),
+            ("afternoon", "Afternoon"),
+        ]
+    )
+
+    description = serializers.CharField(
+        required=True,
+        allow_blank=False
+    )
