@@ -16,7 +16,7 @@ from .models import Booking,UserWallet,WalletTransaction
 from .serializers import BookingSerializer,UserBookingStatusSerializer,VerifyOTPSerializer,UserFeedbackListSerializer
 from decimal import Decimal
 from .models import Notification,RescheduleRequest
-from .serializers import NotificationSerializer,ForgotPasswordSerializer,ResetPasswordSerializer,BookingPaymentDetailsSerializer,CreateFeedbackSerializer
+from .serializers import NotificationSerializer,ForgotPasswordSerializer,ResetPasswordSerializer,BookingPaymentDetailsSerializer,CreateFeedbackSerializer,GoogleLoginSerializer
 from django.db.models import Q
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -39,10 +39,13 @@ from decimal import Decimal
 from admin.models import PlatformFee
 
 import razorpay
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from django.conf import settings
 
 from .models import Booking, Payment,Feedback
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
 from rest_framework.decorators import (
     api_view,
@@ -3264,3 +3267,119 @@ def request_reschedule(request):
         },
         status=status.HTTP_201_CREATED
     )
+
+from rest_framework.views import APIView
+
+class GoogleLoginView(APIView):
+
+    @swagger_auto_schema(
+        request_body=GoogleLoginSerializer
+    )
+    def post(self, request):
+
+        serializer = GoogleLoginSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        google_id_token = serializer.validated_data["id_token"]
+
+        try:
+            google_user = id_token.verify_oauth2_token(
+                google_id_token,
+                requests.Request(),
+                settings.GOOGLE_CLIENT_ID
+            )
+
+        except ValueError:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid Google ID token."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        email = google_user.get("email")
+        email_verified = google_user.get("email_verified")
+
+        if not email:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Google email not found."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not email_verified:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Google email is not verified."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = User.objects.filter(email=email).first()
+
+        if user:
+
+            profile, created = UserProfile.objects.get_or_create(
+                user=user
+            )
+
+            if not profile.first_name:
+                profile.first_name = google_user.get(
+                    "given_name",
+                    ""
+                )
+
+            if not profile.last_name:
+                profile.last_name = google_user.get(
+                    "family_name",
+                    ""
+                )
+
+            profile.save()
+
+        else:
+
+            user = User.objects.create_user(
+                username=email,
+                email=email
+            )
+
+            UserProfile.objects.create(
+                user=user,
+                first_name=google_user.get(
+                    "given_name",
+                    ""
+                ),
+                last_name=google_user.get(
+                    "family_name",
+                    ""
+                )
+            )
+
+        refresh = RefreshToken.for_user(user)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Google login successful.",
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "first_name": user.profile.first_name,
+                    "last_name": user.profile.last_name
+                }
+            },
+            status=status.HTTP_200_OK
+        )

@@ -943,3 +943,7 @@ class RescheduleRequestSerializer(serializers.Serializer):
         required=True,
         allow_blank=False
     )
+
+
+class GoogleLoginSerializer(serializers.Serializer):
+    id_token = serializers.CharField(required=True)
