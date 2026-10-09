@@ -105,4 +105,32 @@ urlpatterns = [
     name="photographer-google-login"
 ),
 
+    path(
+        "forgot-password/",
+        views.photographer_forgot_password,
+        name="photographer-forgot-password"
+),
+    path(
+        "reset-password/",
+        views.photographer_reset_password,
+        name="photographer-reset-password"
+),
+
+
+    path(
+    "verification/verify-payment/",
+    views.verify_verification_payment,
+    name="verify-verification-payment",
+),   
+    path(
+    "verification/create-order/",
+    views.create_verification_order,
+    name="create-verification-order",
+),
+    path(
+        "verification-transactions/",
+        views.verification_transactions,
+        name="verification-transactions"
+    ),
+
 ]

@@ -16,11 +16,11 @@ from user.models import Notification,RescheduleRequest
 from user.serializers import NotificationSerializer
 from rest_framework.response import Response
 from rest_framework import status
-from .models import WeeklyAvailability, AvailabilityException,PhotographerProfile,PhotographerCharge,PhotographerWalletTransaction,PhotographerWallet
-from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer,RejectBookingSerializer,PhotographerMyBookingSerializer,UpdatePhotographerChargeSerializer, PhotographerWalletSerializer,PhotographerGoogleLoginSerializer
+from .models import WeeklyAvailability, AvailabilityException,PhotographerProfile,PhotographerCharge,PhotographerWalletTransaction,PhotographerWallet,PhotographerProfile, PhotographerPasswordResetOTP
+from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer,RejectBookingSerializer,PhotographerMyBookingSerializer,UpdatePhotographerChargeSerializer, PhotographerWalletSerializer,PhotographerGoogleLoginSerializer, PhotographerForgotPasswordSerializer,PhotographerResetPasswordSerializer
 from datetime import date, timedelta
 import random
-from .serializers import  PhotographerVerifyOTPSerializer,PhotographerChargeSerializer,PhotographerBookingRequestSerializer,PhotographerRescheduleRequestSerializer
+from .serializers import  PhotographerVerifyOTPSerializer,PhotographerChargeSerializer,PhotographerBookingRequestSerializer,PhotographerRescheduleRequestSerializer,CreateVerificationOrderSerializer
 
 from django.core.mail import send_mail
 from django.utils import timezone
@@ -49,7 +49,33 @@ from .models import (
     PhotographerWalletTransaction,
     
 )
+from rest_framework.parsers import FormParser
 
+from admin.models import VerificationPlan
+from .serializers import VerificationSerializer
+from decimal import Decimal
+from django.conf import settings
+from django.db import transaction
+
+
+import razorpay
+
+
+from rest_framework.decorators import (
+    api_view,
+    permission_classes,
+    parser_classes,
+)
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import FormParser, JSONParser
+from rest_framework.response import Response
+from rest_framework import status
+
+from drf_yasg.utils import swagger_auto_schema
+
+from admin.models import VerificationPlan
+from .models import VerificationPayment
+from .serializers import CreateVerificationOrderSerializer
 
 def check_photographer_verification(request):
 
@@ -252,6 +278,67 @@ def profile(request):
 
 
 
+# @swagger_auto_schema(
+#     method="post",
+#     request_body=VerificationSerializer,
+# )
+# @api_view(["POST"])
+# @permission_classes([IsAuthenticated])
+# @parser_classes([FormParser])
+# def verification(request):
+#     response = check_photographer_verification(request)
+#     if response:
+#         return response
+
+#     serializer = VerificationSerializer(data=request.data)
+
+#     if serializer.is_valid():
+
+#         profile = request.user.photographer_profile
+#         plan = serializer.validated_data["plan_mode"]
+
+#         # Prevent selecting the same plan again
+#         if profile.plan_mode == plan:
+#             return Response(
+#                 {
+#                     "message": f"You are already using the {plan.capitalize()} plan."
+#                 },
+#                 status=status.HTTP_200_OK
+#             )
+
+#         if plan == "free":
+
+#             profile.plan_mode = "free"
+#             profile.save()
+
+#             return Response(
+#                 {
+#                     "message": "Free plan activated successfully.",
+#                     "plan_mode": profile.plan_mode
+#                 },
+#                 status=status.HTTP_200_OK
+#             )
+
+#         if plan == "gold":
+
+#             return Response(
+#                 {
+#                     "message": "Gold plan requires payment. Payment integration will be available soon."
+#                 },
+#                 status=status.HTTP_200_OK
+#             )
+
+#         if plan == "platinum":
+
+#             return Response(
+#                 {
+#                     "message": "Platinum plan requires payment. Payment integration will be available soon."
+#                 },
+#                 status=status.HTTP_200_OK
+#             )
+
+#     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 @swagger_auto_schema(
     method="post",
     request_body=VerificationSerializer,
@@ -266,54 +353,62 @@ def verification(request):
 
     serializer = VerificationSerializer(data=request.data)
 
-    if serializer.is_valid():
+    if not serializer.is_valid():
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-        profile = request.user.photographer_profile
-        plan = serializer.validated_data["plan_mode"]
+    profile = request.user.photographer_profile
+    plan = serializer.validated_data["plan_mode"]
 
-        # Prevent selecting the same plan again
-        if profile.plan_mode == plan:
-            return Response(
-                {
-                    "message": f"You are already using the {plan.capitalize()} plan."
-                },
-                status=status.HTTP_200_OK
-            )
+    # Prevent selecting the same plan again
+    if profile.plan_mode == plan:
+        return Response(
+            {
+                "message": f"You are already using the {plan.capitalize()} plan."
+            },
+            status=status.HTTP_200_OK,
+        )
 
-        if plan == "free":
+    # Activate the free plan
+    if plan == "free":
+        profile.plan_mode = "free"
+        profile.save(update_fields=["plan_mode"])
 
-            profile.plan_mode = "free"
-            profile.save()
+        return Response(
+            {
+                "message": "Free plan activated successfully.",
+                "plan_mode": profile.plan_mode,
+            },
+            status=status.HTTP_200_OK,
+        )
 
-            return Response(
-                {
-                    "message": "Free plan activated successfully.",
-                    "plan_mode": profile.plan_mode
-                },
-                status=status.HTTP_200_OK
-            )
+    # Get the admin-configured charge for Gold or Platinum
+    try:
+        verification_plan = VerificationPlan.objects.get(
+            plan_name=plan,
+            is_active=True,
+        )
+    except VerificationPlan.DoesNotExist:
+        return Response(
+            {
+                "error": f"The {plan.capitalize()} plan is currently unavailable."
+            },
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
-        if plan == "gold":
-
-            return Response(
-                {
-                    "message": "Gold plan requires payment. Payment integration will be available soon."
-                },
-                status=status.HTTP_200_OK
-            )
-
-        if plan == "platinum":
-
-            return Response(
-                {
-                    "message": "Platinum plan requires payment. Payment integration will be available soon."
-                },
-                status=status.HTTP_200_OK
-            )
-
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
+    return Response(
+        {
+            "message": f"The {plan.capitalize()} plan requires payment.",
+            "plan_mode": plan,
+            "verification_charge": str(
+                verification_plan.verification_charge
+            ),
+            "payment_required": True,
+        },
+        status=status.HTTP_200_OK,
+    )
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def photographer_notifications(request):
@@ -2073,6 +2168,506 @@ class PhotographerGoogleLoginView(APIView):
                 "is_verified": photographer.is_verified
             }
         }, status=status.HTTP_200_OK)
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=PhotographerForgotPasswordSerializer
+)
+@api_view(["POST"])
+@parser_classes([FormParser])
+def photographer_forgot_password(request):
+
+    serializer = PhotographerForgotPasswordSerializer(
+        data=request.data
+    )
+
+    if serializer.is_valid():
+
+        email = serializer.validated_data["email"].strip().lower()
+
+        # Check whether this email belongs to a photographer
+        user = User.objects.filter(email__iexact=email).first()
+
+        if not user or not PhotographerProfile.objects.filter(user=user).exists():
+            return Response(
+                {"error": "No photographer account found with this email."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Generate OTP
+        otp = str(random.randint(100000, 999999))
+
+        # Remove old OTP
+        PhotographerPasswordResetOTP.objects.filter(
+            email__iexact=user.email
+        ).delete()
+
+        # Save new OTP
+        PhotographerPasswordResetOTP.objects.create(
+            email=user.email,
+            otp=otp,
+            created_at=timezone.now()
+        )
+
+        # Send OTP
+        try:
+            send_mail(
+                subject="SnapsHire - Photographer Password Reset",
+                message=f"""
+Hello,
+
+We received a request to reset your SnapsHire photographer account password.
+
+Your verification code is: {otp}
+
+This code is valid for 5 minutes. Please do not share this code with anyone.
+
+If you did not request a password reset, you may safely disregard this email.
+
+Regards,
+SnapsHire Team
+Photography Booking Platform
+""",
+                from_email=None,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+        except Exception:
+            PhotographerPasswordResetOTP.objects.filter(
+                email__iexact=user.email
+            ).delete()
+
+            return Response(
+                {"error": "Unable to send OTP. Please try again."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+        return Response(
+            {"message": "OTP sent successfully. Please check your email."},
+            status=status.HTTP_200_OK
+        )
+
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST
+    )
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=PhotographerResetPasswordSerializer
+)
+@api_view(["POST"])
+@parser_classes([FormParser])
+def photographer_reset_password(request):
+
+    serializer = PhotographerResetPasswordSerializer(
+        data=request.data
+    )
+
+    if serializer.is_valid():
+
+        email = serializer.validated_data["email"].strip().lower()
+        otp = serializer.validated_data["otp"]
+        new_password = serializer.validated_data["new_password"]
+
+        # Find the photographer account
+        user = User.objects.filter(email__iexact=email).first()
+
+        if not user or not PhotographerProfile.objects.filter(user=user).exists():
+            return Response(
+                {"error": "Photographer account not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            otp_record = PhotographerPasswordResetOTP.objects.get(
+                email__iexact=user.email
+            )
+        except PhotographerPasswordResetOTP.DoesNotExist:
+            return Response(
+                {"error": "OTP not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check OTP expiry
+        if timezone.now() > otp_record.created_at + timedelta(minutes=5):
+            otp_record.delete()
+
+            return Response(
+                {"error": "OTP has expired."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check OTP
+        if otp_record.otp != otp:
+            return Response(
+                {"error": "Invalid OTP."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update password securely
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+
+        # Delete OTP after successful reset
+        otp_record.delete()
+
+        return Response(
+            {"message": "Photographer password reset successful."},
+            status=status.HTTP_200_OK
+        )
+
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST
+    )
+
+
+
+import razorpay
+
+from django.conf import settings
+from django.db import transaction
+
+from rest_framework.decorators import (
+    api_view,
+    permission_classes,
+    parser_classes,
+)
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import FormParser, JSONParser
+from rest_framework.response import Response
+from rest_framework import status
+
+from drf_yasg.utils import swagger_auto_schema
+
+from .models import VerificationPayment
+from .serializers import VerifyVerificationPaymentSerializer
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=VerifyVerificationPaymentSerializer,
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@parser_classes([FormParser, JSONParser])
+def verify_verification_payment(request):
+    serializer = VerifyVerificationPaymentSerializer(
+        data=request.data
+    )
+
+    if not serializer.is_valid():
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    order_id = serializer.validated_data["razorpay_order_id"]
+    payment_id = serializer.validated_data["razorpay_payment_id"]
+    signature = serializer.validated_data["razorpay_signature"]
+
+    try:
+        profile = request.user.photographer_profile
+    except AttributeError:
+        return Response(
+            {"error": "Photographer profile not found."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    try:
+        payment_record = VerificationPayment.objects.get(
+            razorpay_order_id=order_id,
+            photographer=profile,
+        )
+    except VerificationPayment.DoesNotExist:
+        return Response(
+            {"error": "Payment order not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if payment_record.status == "paid":
+        return Response(
+            {"message": "This payment has already been verified."},
+            status=status.HTTP_200_OK,
+        )
+
+    if payment_record.status != "pending":
+        return Response(
+            {"error": "This payment is not pending."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    client = razorpay.Client(
+        auth=(
+            settings.RAZORPAY_KEY_ID,
+            settings.RAZORPAY_KEY_SECRET,
+        )
+    )
+
+    # Verify the Razorpay checkout signature.
+    try:
+        client.utility.verify_payment_signature({
+            "razorpay_order_id": order_id,
+            "razorpay_payment_id": payment_id,
+            "razorpay_signature": signature,
+        })
+    except razorpay.errors.SignatureVerificationError:
+        return Response(
+            {"error": "Invalid payment signature."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except Exception:
+        return Response(
+            {"error": "Unable to verify payment. Please try again."},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    # Confirm payment details directly with Razorpay.
+    try:
+        razorpay_payment = client.payment.fetch(payment_id)
+    except Exception:
+        return Response(
+            {"error": "Unable to retrieve payment status."},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    expected_amount = int(payment_record.amount * 100)
+
+    if (
+        razorpay_payment.get("order_id") != order_id
+        or razorpay_payment.get("amount") != expected_amount
+        or razorpay_payment.get("currency") != payment_record.currency
+    ):
+        return Response(
+            {"error": "Payment details do not match the order."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if razorpay_payment.get("status") != "captured":
+        return Response(
+            {
+                "message": "Payment has not been captured yet.",
+                "payment_status": razorpay_payment.get("status"),
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    # Lock the payment record to prevent concurrent activation.
+    with transaction.atomic():
+        payment_record = VerificationPayment.objects.select_for_update().get(
+            pk=payment_record.pk
+        )
+
+        if payment_record.status == "paid":
+            return Response(
+                {"message": "This payment has already been verified."},
+                status=status.HTTP_200_OK,
+            )
+
+        if payment_record.status != "pending":
+            return Response(
+                {"error": "This payment is not pending."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        profile.plan_mode = payment_record.plan_mode
+        profile.save(update_fields=["plan_mode"])
+
+        payment_record.razorpay_payment_id = payment_id
+        payment_record.status = "paid"
+        payment_record.save(
+            update_fields=["razorpay_payment_id", "status"]
+        )
+
+    return Response(
+        {
+            "message": "Payment verified and plan activated successfully.",
+            "plan_mode": profile.plan_mode,
+            "amount": str(payment_record.amount),
+            "payment_status": payment_record.status,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+@swagger_auto_schema(
+    method="post",
+    request_body=CreateVerificationOrderSerializer,
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@parser_classes([FormParser, JSONParser])
+def create_verification_order(request):
+
+    # 1. Get photographer profile
+    try:
+        profile = request.user.photographer_profile
+    except AttributeError:
+        return Response(
+            {"error": "Photographer profile not found."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # 2. Validate selected plan
+    serializer = CreateVerificationOrderSerializer(
+        data=request.data
+    )
+
+    if not serializer.is_valid():
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    plan_mode = serializer.validated_data["plan_mode"]
+
+    # 3. Prevent selecting the current plan again
+    if profile.plan_mode == plan_mode:
+        return Response(
+            {"error": f"You are already using the {plan_mode} plan."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # 4. Get admin-configured price
+    try:
+        plan = VerificationPlan.objects.get(
+            plan_name=plan_mode,
+            is_active=True,
+        )
+    except VerificationPlan.DoesNotExist:
+        return Response(
+            {"error": "Selected plan is unavailable."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    amount = plan.verification_charge
+
+    # 5. Convert rupees to paise
+    amount_in_paise = int(amount * Decimal("100"))
+
+    if (
+        amount <= 0
+        or amount * Decimal("100") != amount_in_paise
+    ):
+        return Response(
+            {"error": "Invalid verification charge."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # 6. Create Razorpay order
+    client = razorpay.Client(
+        auth=(
+            settings.RAZORPAY_KEY_ID,
+            settings.RAZORPAY_KEY_SECRET,
+        )
+    )
+
+    try:
+        order = client.order.create({
+            "amount": amount_in_paise,
+            "currency": "INR",
+            "receipt": f"verify_{profile.pk}_{plan_mode}",
+            "notes": {
+                "photographer_id": str(profile.pk),
+                "plan_mode": plan_mode,
+            },
+        })
+    except Exception:
+        return Response(
+            {"error": "Unable to create Razorpay order."},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    # 7. Save payment record
+    try:
+        with transaction.atomic():
+            payment = VerificationPayment.objects.create(
+                photographer=profile,
+                plan_mode=plan_mode,
+                amount=amount,
+                razorpay_order_id=order["id"],
+                status="pending",
+            )
+    except Exception:
+        # The Razorpay order exists, but the local record failed.
+        # Do not activate the plan. Log and reconcile this order.
+        return Response(
+            {
+                "error": "Order was created, but saving the payment record failed.",
+                "razorpay_order_id": order["id"],
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    # 8. Return payment details to frontend
+    return Response(
+        {
+            "message": "Payment order created successfully.",
+            "payment_id": payment.id,
+            "plan_mode": payment.plan_mode,
+            "amount": str(payment.amount),
+            "currency": payment.currency,
+            "payment_status": payment.status,
+            "razorpay_order_id": order["id"],
+           
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@swagger_auto_schema(
+    method="get",
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def verification_transactions(request):
+
+    # Check whether the user is a photographer
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    photographer = request.user.photographer_profile
+
+    # Get only this photographer's verification payments
+    payments = VerificationPayment.objects.filter(
+        photographer=photographer
+    ).order_by("-created_at")
+
+    transactions = []
+
+    for payment in payments:
+        transactions.append({
+            "transaction_id": payment.id,
+            "transaction_type": "verification_payment",
+            "plan_mode": payment.plan_mode,
+            "amount": str(payment.amount),
+            "currency": payment.currency,
+            "razorpay_order_id": payment.razorpay_order_id,
+            "razorpay_payment_id": (
+                payment.razorpay_payment_id or None
+            ),
+            "status": payment.status,
+            "created_at": payment.created_at,
+        })
+
+    return Response(
+        {
+            "success": True,
+            "message": "Verification transactions retrieved successfully.",
+            "count": len(transactions),
+            "transactions": transactions
+        },
+        status=status.HTTP_200_OK
+    )
+
 
 
 

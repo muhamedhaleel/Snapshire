@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from django.db import models
+from django.utils import timezone
 
 
 def photographer_profile_image_path(instance, filename):
@@ -230,3 +231,72 @@ class PhotographerWalletTransaction(models.Model):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+
+
+class PhotographerPasswordResetOTP(models.Model):
+    email = models.EmailField(unique=True)
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return self.email
+
+
+
+
+class VerificationPayment(models.Model):
+
+    PLAN_CHOICES = [
+        ("gold", "Gold"),
+        ("platinum", "Platinum"),
+    ]
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("paid", "Paid"),
+        ("failed", "Failed"),
+    ]
+
+    photographer = models.ForeignKey(
+        PhotographerProfile,
+        on_delete=models.PROTECT,
+        related_name="verification_payments",
+    )
+
+    plan_mode = models.CharField(
+        max_length=20,
+        choices=PLAN_CHOICES,
+    )
+
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+    )
+
+    razorpay_order_id = models.CharField(
+        max_length=100,
+        unique=True,
+    )
+
+    razorpay_payment_id = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+    )
+    currency = models.CharField(
+        max_length=3,
+        default="INR",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="pending",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.plan_mode} - {self.razorpay_order_id}"

@@ -10,6 +10,8 @@ from django.contrib.auth.password_validation import validate_password as django_
 from rest_framework import serializers
 from rest_framework import serializers
 
+from django.contrib.auth.password_validation import validate_password
+
 
 
 # class SignupSerializer(serializers.ModelSerializer):
@@ -457,6 +459,8 @@ class  PhotographerVerifyOTPSerializer(serializers.Serializer):
 
 
 
+
+
 class PhotographerChargeSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -695,3 +699,50 @@ class PhotographerRescheduleRequestSerializer(
 
 class PhotographerGoogleLoginSerializer(serializers.Serializer):
     id_token = serializers.CharField(required=True)
+
+
+
+from rest_framework import serializers
+from django.contrib.auth.password_validation import validate_password
+
+
+class PhotographerForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class PhotographerResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(min_length=6, max_length=6)
+    new_password = serializers.CharField(
+        write_only=True,
+        trim_whitespace=False
+    )
+    confirm_password = serializers.CharField(
+        write_only=True,
+        trim_whitespace=False
+    )
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError({
+                "confirm_password": "Passwords do not match."
+            })
+
+        validate_password(attrs["new_password"])
+        return attrs
+
+
+
+
+
+
+class VerifyVerificationPaymentSerializer(serializers.Serializer):
+    razorpay_order_id = serializers.CharField()
+    razorpay_payment_id = serializers.CharField()
+    razorpay_signature = serializers.CharField()
+
+
+class CreateVerificationOrderSerializer(serializers.Serializer):
+    plan_mode = serializers.ChoiceField(
+        choices=["gold", "platinum"]
+    )

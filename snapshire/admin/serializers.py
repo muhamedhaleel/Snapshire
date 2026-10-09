@@ -5,7 +5,7 @@ from rest_framework import serializers
 from user.models import UserProfile
 from photographer.models import PhotographerProfile,PhotographerWalletTransaction
 from user.models import Booking,Feedback,Payment,WalletTransaction
-from .models import PlatformFee
+from .models import PlatformFee,VerificationPlan
 from decimal import Decimal
 
 class AdminLoginSerializer(serializers.Serializer):
@@ -622,3 +622,18 @@ class AdminUserRefundTransactionSerializer(serializers.ModelSerializer):
     def get_user_name(self, obj):
         user = obj.booking.user
         return f"{user.first_name} {user.last_name}".strip()
+    
+class VerificationPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VerificationPlan
+        fields = [
+            "id",
+            "plan_name",
+            "verification_charge",
+            "is_active",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "updated_at"]
+
+
+

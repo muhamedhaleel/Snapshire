@@ -16,7 +16,7 @@ from .serializers import PendingPhotographerSerializer,AdminDashboardSerializer
 from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination
 from drf_yasg import openapi
-from .models import PlatformFee
+from .models import PlatformFee,VerificationPlan
 from .serializers import (
     AdminLoginSerializer,
     UserListSerializer,
@@ -26,6 +26,7 @@ from .serializers import (
     AdminCancelledBookingSerializer,AdminPhotographerTransactionSerializer,
     PhotographerWalletTransaction,AdminUserRefundTransactionSerializer
 )
+from .serializers import VerificationPlanSerializer
 
 
 # ===========================
@@ -846,4 +847,85 @@ def admin_user_refund_transactions(request):
             "results": serializer.data
         },
         status=status.HTTP_200_OK
+    )
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=VerificationPlanSerializer,
+)
+@api_view(["POST"])
+@parser_classes([FormParser])
+@permission_classes([IsAdminUser])
+def add_verification_plan(request):
+    serializer = VerificationPlanSerializer(data=request.data)
+
+    if serializer.is_valid():
+        serializer.save()
+
+        return Response(
+            {
+                "message": "Verification plan created successfully.",
+                "data": serializer.data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+@swagger_auto_schema(
+    method="get",
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def list_verification_plans(request):
+    plans = VerificationPlan.objects.all().order_by("id")
+    serializer = VerificationPlanSerializer(plans, many=True)
+
+    return Response(
+        {"data": serializer.data},
+        status=status.HTTP_200_OK,
+    )
+
+
+@swagger_auto_schema(
+    method="patch",
+    request_body=VerificationPlanSerializer,
+)
+@api_view(["PATCH"])
+@parser_classes([FormParser])
+@permission_classes([IsAdminUser])
+def update_verification_plan(request, plan_id):
+    try:
+        plan = VerificationPlan.objects.get(id=plan_id)
+    except VerificationPlan.DoesNotExist:
+        return Response(
+            {"error": "Verification plan not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    serializer = VerificationPlanSerializer(
+        plan,
+        data=request.data,
+        partial=True,
+    )
+
+    if serializer.is_valid():
+        serializer.save()
+
+        return Response(
+            {
+                "message": "Verification charge updated successfully.",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST,
     )

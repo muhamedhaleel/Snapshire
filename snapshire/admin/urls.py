@@ -103,7 +103,26 @@ urlpatterns = [
     "user-refund-transactions-details/",
     views.admin_user_refund_transactions,
     name="admin-user-refund-transactions"
+),   
+
+    path(
+        "verification-plans/",
+        views.add_verification_plan,
+        name="add-verification-plan",
     ),
+    path(
+        "verification-plans/list/",
+        views.list_verification_plans,
+        name="list-verification-plans",
+    ),
+    path(
+        "verification-plans-update/<int:plan_id>/",
+        views.update_verification_plan,
+        name="update-verification-plan",
+    ),
+
+
+
     
 
 ]
