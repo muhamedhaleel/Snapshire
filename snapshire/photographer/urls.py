@@ -99,4 +99,10 @@ urlpatterns = [
     name="reject-reschedule"
 ),
 
-    ]
+    path(
+    "google-login/",
+    views.PhotographerGoogleLoginView.as_view(),
+    name="photographer-google-login"
+),
+
+]

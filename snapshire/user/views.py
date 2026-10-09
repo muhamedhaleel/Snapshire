@@ -46,6 +46,7 @@ from django.conf import settings
 from .models import Booking, Payment,Feedback
 from google.oauth2 import id_token
 from google.auth.transport import requests
+from .models import UserProfile
 
 from rest_framework.decorators import (
     api_view,
@@ -3270,13 +3271,11 @@ def request_reschedule(request):
 
 from rest_framework.views import APIView
 
+
 class GoogleLoginView(APIView):
 
-    @swagger_auto_schema(
-        request_body=GoogleLoginSerializer
-    )
+    @swagger_auto_schema(request_body=GoogleLoginSerializer)
     def post(self, request):
-
         serializer = GoogleLoginSerializer(data=request.data)
 
         if not serializer.is_valid():
@@ -3285,101 +3284,87 @@ class GoogleLoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        google_id_token = serializer.validated_data["id_token"]
-
         try:
             google_user = id_token.verify_oauth2_token(
-                google_id_token,
+                serializer.validated_data["id_token"],
                 requests.Request(),
                 settings.GOOGLE_CLIENT_ID
             )
-
         except ValueError:
-            return Response(
-                {
-                    "success": False,
-                    "message": "Invalid Google ID token."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({
+                "success": False,
+                "message": "Invalid Google ID token."
+            }, status=status.HTTP_400_BAD_REQUEST)
 
-        email = google_user.get("email")
-        email_verified = google_user.get("email_verified")
+        email = (google_user.get("email") or "").strip()
 
-        if not email:
-            return Response(
-                {
-                    "success": False,
-                    "message": "Google email not found."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        if not email or google_user.get("email_verified") is not True:
+            return Response({
+                "success": False,
+                "message": "A verified Google email is required."
+            }, status=status.HTTP_400_BAD_REQUEST)
 
-        if not email_verified:
-            return Response(
-                {
-                    "success": False,
-                    "message": "Google email is not verified."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        user = User.objects.filter(email=email).first()
+        user = User.objects.filter(email__iexact=email).first()
 
         if user:
+            # Block photographer accounts
+            if PhotographerProfile.objects.filter(user=user).exists():
+                return Response({
+                    "success": False,
+                    "message": (
+                        "This email belongs to a photographer. "
+                        "Please use Photographer Login."
+                    )
+                }, status=status.HTTP_403_FORBIDDEN)
 
-            profile, created = UserProfile.objects.get_or_create(
-                user=user
-            )
+            # Existing accounts must already have a UserProfile
+            profile = UserProfile.objects.filter(user=user).first()
 
-            if not profile.first_name:
-                profile.first_name = google_user.get(
-                    "given_name",
-                    ""
-                )
-
-            if not profile.last_name:
-                profile.last_name = google_user.get(
-                    "family_name",
-                    ""
-                )
-
-            profile.save()
+            if not profile:
+                return Response({
+                    "success": False,
+                    "message": "User profile not found. Please contact support."
+                }, status=status.HTTP_403_FORBIDDEN)
 
         else:
-
+            # Register a new normal user
             user = User.objects.create_user(
                 username=email,
                 email=email
             )
 
-            UserProfile.objects.create(
+            profile = UserProfile.objects.create(
                 user=user,
-                first_name=google_user.get(
-                    "given_name",
-                    ""
-                ),
-                last_name=google_user.get(
-                    "family_name",
-                    ""
-                )
+                first_name=google_user.get("given_name", ""),
+                last_name=google_user.get("family_name", "")
             )
+
+        # Fill names only when they are empty
+        changed = False
+
+        if not profile.first_name and google_user.get("given_name"):
+            profile.first_name = google_user["given_name"]
+            changed = True
+
+        if not profile.last_name and google_user.get("family_name"):
+            profile.last_name = google_user["family_name"]
+            changed = True
+
+        if changed:
+            profile.save()
 
         refresh = RefreshToken.for_user(user)
 
-        return Response(
-            {
-                "success": True,
-                "message": "Google login successful.",
-                "access": str(refresh.access_token),
-                "refresh": str(refresh),
-                "user": {
-                    "id": user.id,
-                    "username": user.username,
-                    "email": user.email,
-                    "first_name": user.profile.first_name,
-                    "last_name": user.profile.last_name
-                }
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response({
+            "success": True,
+            "message": "Google login successful.",
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "first_name": profile.first_name,
+                "last_name": profile.last_name
+            }
+        }, status=status.HTTP_200_OK)

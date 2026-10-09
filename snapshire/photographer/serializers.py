@@ -689,3 +689,9 @@ class PhotographerRescheduleRequestSerializer(
         ]
 
         read_only_fields = fields
+
+
+
+
+class PhotographerGoogleLoginSerializer(serializers.Serializer):
+    id_token = serializers.CharField(required=True)
