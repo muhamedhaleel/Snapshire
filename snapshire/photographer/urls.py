@@ -133,4 +133,10 @@ urlpatterns = [
         name="verification-transactions"
     ),
 
+    path(
+    "Add-feedback/submit/",
+    views.submit_photographer_feedback,
+    name="submit-photographer-feedback"
+    ),
+
 ]

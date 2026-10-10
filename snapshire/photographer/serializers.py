@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 from .models import PhotographerProfile,PhotographerWallet,PhotographerWalletTransaction
 from django.contrib.auth import authenticate
-from user.models import Notification,Booking,RescheduleRequest
+from user.models import Notification,Booking,RescheduleRequest,Feedback
 from.models import WeeklyAvailability,AvailabilityException,PhotographerCharge
 import re
 from django.contrib.auth.models import User
@@ -746,3 +746,34 @@ class CreateVerificationOrderSerializer(serializers.Serializer):
     plan_mode = serializers.ChoiceField(
         choices=["gold", "platinum"]
     )
+
+
+
+class PhotographerFeedbackSerializer(serializers.ModelSerializer):
+    booking_id = serializers.IntegerField(
+        source="booking.id",
+        read_only=True
+    )
+    user_id = serializers.IntegerField(
+        source="user.id",
+        read_only=True
+    )
+
+    class Meta:
+        model = Feedback
+        fields = [
+            "id",
+            "booking_id",
+            "user_id",
+            "rating",
+            "comment",
+            "feedback_by",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "booking_id",
+            "user_id",
+            "feedback_by",
+            "created_at",
+        ]

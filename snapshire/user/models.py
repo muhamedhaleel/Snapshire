@@ -267,6 +267,15 @@ class Feedback(models.Model):
         auto_now_add=True
     )
 
+    feedback_by = models.CharField(
+    max_length=20,
+    choices=[
+        ("user", "User"),
+        ("photographer", "Photographer"),
+    ],
+    default="user",
+    )
+
     def __str__(self):
 
         return (

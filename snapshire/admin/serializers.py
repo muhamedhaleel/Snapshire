@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from user.models import UserProfile
 from photographer.models import PhotographerProfile,PhotographerWalletTransaction,VerificationPayment
-from user.models import Booking,Feedback,Payment,WalletTransaction
+from user.models import Booking,Feedback,Payment,WalletTransaction,RescheduleRequest
 from .models import PlatformFee,VerificationPlan
 from decimal import Decimal
 
@@ -787,3 +787,69 @@ class AdminVerificationWalletTransactionSerializer(serializers.ModelSerializer):
         user = obj.photographer.user
         return user.get_full_name() or user.username
 
+
+
+class AdminRescheduleRequestSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+    username = serializers.CharField(source="user.username", read_only=True)
+    user_email = serializers.EmailField(source="user.email", read_only=True)
+
+    photographer_id = serializers.IntegerField(
+        source="photographer.id",
+        read_only=True
+    )
+    photographer_name = serializers.CharField(
+        source="photographer.user.username",
+        read_only=True
+    )
+
+    reason = serializers.CharField(
+        source="description",
+        read_only=True
+    )
+
+    class Meta:
+        model = RescheduleRequest
+        fields = [
+            "user_id",
+            "username",
+            "user_email",
+            "photographer_id",
+            "photographer_name",
+            "old_date",
+            "old_time",
+            "new_date",
+            "new_time",
+            "new_session",
+            "reason",
+            "status",
+            "created_at",
+        ]
+
+class AdminPhotographerFeedbackSerializer(serializers.ModelSerializer):
+    booking_id = serializers.IntegerField(
+        source="booking.id",
+        read_only=True
+    )
+    user_id = serializers.IntegerField(
+        source="user.id",
+        read_only=True
+    )
+    photographer_id = serializers.IntegerField(
+        source="photographer.id",
+        read_only=True
+    )
+
+    class Meta:
+        model = Feedback
+        fields = [
+            "id",
+            "booking_id",
+            "user_id",
+            "photographer_id",
+            "rating",
+            "comment",
+            "feedback_by",
+            "created_at",
+        ]
+        read_only_fields = fields

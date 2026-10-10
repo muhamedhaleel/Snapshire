@@ -12,7 +12,7 @@ from rest_framework.decorators import api_view, permission_classes, parser_class
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.permissions import IsAuthenticated
 from .serializers import VerificationSerializer
-from user.models import Notification,RescheduleRequest
+from user.models import Notification,RescheduleRequest,Feedback
 from user.serializers import NotificationSerializer
 from rest_framework.response import Response
 from rest_framework import status
@@ -21,7 +21,8 @@ from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSeria
 from datetime import date, timedelta
 import random
 from .serializers import  PhotographerVerifyOTPSerializer,PhotographerChargeSerializer,PhotographerBookingRequestSerializer,PhotographerRescheduleRequestSerializer,CreateVerificationOrderSerializer
-
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework import status
@@ -34,7 +35,7 @@ from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from django.contrib.auth.models import User
 from drf_yasg.utils import swagger_auto_schema
-from .serializers import UpdateWorkStatusSerializer
+from .serializers import UpdateWorkStatusSerializer,PhotographerFeedbackSerializer
 from user.models import Booking,UserProfile
 from django.db.models import Sum
 from django.db import transaction
@@ -56,6 +57,7 @@ from .serializers import VerificationSerializer
 from decimal import Decimal
 from django.conf import settings
 from django.db import transaction
+from user.models import Booking, Feedback
 
 
 import razorpay
@@ -2670,5 +2672,139 @@ def verification_transactions(request):
 
 
 
+@swagger_auto_schema(
+    method="post",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["booking_id", "rating", "comment"],
+        properties={
+            "booking_id": openapi.Schema(
+                type=openapi.TYPE_INTEGER
+            ),
+            "rating": openapi.Schema(
+                type=openapi.TYPE_INTEGER,
+                minimum=1,
+                maximum=5
+            ),
+            "comment": openapi.Schema(
+                type=openapi.TYPE_STRING
+            ),
+        },
+    ),
+    responses={201: PhotographerFeedbackSerializer}
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def submit_photographer_feedback(request):
 
+    booking_id = request.data.get("booking_id")
+    rating = request.data.get("rating")
+    comment = request.data.get("comment", "").strip()
 
+    # Validate required fields
+    if not booking_id or rating is None or not comment:
+        return Response(
+            {
+                "success": False,
+                "message": "booking_id, rating, and comment are required."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Validate rating
+    try:
+        rating = int(rating)
+    except (TypeError, ValueError):
+        return Response(
+            {
+                "success": False,
+                "message": "Rating must be an integer."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if not 1 <= rating <= 5:
+        return Response(
+            {
+                "success": False,
+                "message": "Rating must be between 1 and 5."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Find the logged-in photographer's profile
+    photographer = PhotographerProfile.objects.filter(
+        user=request.user
+    ).first()
+
+    if not photographer:
+        return Response(
+            {
+                "success": False,
+                "message": "Photographer profile not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Find a booking belonging to this photographer
+    booking = Booking.objects.select_related(
+        "user", "photographer"
+    ).filter(
+        id=booking_id,
+        photographer=photographer
+    ).first()
+
+    if not booking:
+        return Response(
+            {
+                "success": False,
+                "message": "Booking not found for this photographer."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Feedback is allowed only after completion
+    if booking.status != "completed":
+        return Response(
+            {
+                "success": False,
+                "message": "Feedback can only be submitted for completed bookings."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Prevent duplicate photographer feedback
+    already_submitted = Feedback.objects.filter(
+        booking=booking,
+        feedback_by="photographer"
+    ).exists()
+
+    if already_submitted:
+        return Response(
+            {
+                "success": False,
+                "message": "You have already submitted feedback for this booking."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Save feedback
+    feedback = Feedback.objects.create(
+        user=booking.user,
+        photographer=photographer,
+        booking=booking,
+        rating=rating,
+        comment=comment,
+        feedback_by="photographer"
+    )
+
+    serializer = PhotographerFeedbackSerializer(feedback)
+
+    return Response(
+        {
+            "success": True,
+            "message": "Photographer feedback submitted successfully.",
+            "data": serializer.data
+        },
+        status=status.HTTP_201_CREATED
+    )

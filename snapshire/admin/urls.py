@@ -128,6 +128,22 @@ urlpatterns = [
     ),
 
 
+    
+    path(
+    "reschedule-request-details/",
+    views.admin_view_reschedule_requests,
+    name="admin-view-reschedule-requests"
+    ),
+
+
+    path(
+    "photographer-feedback-bookings/",
+    views.photographer_feedback_for_bookings,
+    name="photographer-feedback-for-bookings"
+),
+
+
+
 
     
 

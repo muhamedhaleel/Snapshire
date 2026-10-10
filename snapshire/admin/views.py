@@ -10,9 +10,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from drf_yasg.utils import swagger_auto_schema
 
-from user.models import UserProfile,Booking,Feedback,Payment,WalletTransaction
+from user.models import UserProfile,Booking,Feedback,Payment,WalletTransaction,RescheduleRequest
 from photographer.models import PhotographerProfile,VerificationPayment
-from .serializers import PendingPhotographerSerializer,AdminDashboardSerializer
+from .serializers import PendingPhotographerSerializer,AdminDashboardSerializer,AdminPhotographerFeedbackSerializer
 from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination
 from drf_yasg import openapi
@@ -27,6 +27,7 @@ from .serializers import (
     PhotographerWalletTransaction,AdminUserRefundTransactionSerializer,PremiumVerificationSerializer,
     AdminWalletTransactionSerializer,
     AdminVerificationWalletTransactionSerializer,
+    AdminRescheduleRequestSerializer
 )
 from .serializers import VerificationPlanSerializer
 from photographer.models import VerificationPayment
@@ -1112,4 +1113,130 @@ def premium_verified_photographers(request):
             "data": serializer.data
         },
         status=status.HTTP_200_OK
+    )
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: AdminRescheduleRequestSerializer(many=True)}
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_view_reschedule_requests(request):
+
+    requests = RescheduleRequest.objects.select_related(
+        "user",
+        "photographer",
+        "photographer__user"
+    ).order_by("-created_at")
+
+    serializer = AdminRescheduleRequestSerializer(
+        requests,
+        many=True
+    )
+
+    return Response(
+        {
+            "success": True,
+            "message": "Reschedule requests retrieved successfully.",
+            "count": requests.count(),
+            "data": serializer.data,
+        },
+        status=status.HTTP_200_OK
+    )
+
+@swagger_auto_schema(
+    method="get",
+    manual_parameters=[
+        openapi.Parameter(
+            "rating",
+            openapi.IN_QUERY,
+            description="Filter feedback by rating (1-5)",
+            type=openapi.TYPE_INTEGER,
+        ),
+        
+    ],
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def photographer_feedback_for_bookings(request):
+
+    # Get all feedback, newest first
+    feedbacks = Feedback.objects.select_related(
+        "user",
+        "photographer",
+        "booking",
+    ).all().order_by("-created_at")
+
+    # Filter by rating
+    rating = request.query_params.get("rating")
+
+    if rating:
+        try:
+            rating = int(rating)
+        except ValueError:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Rating must be an integer between 1 and 5.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if rating < 1 or rating > 5:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Rating must be between 1 and 5.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        feedbacks = feedbacks.filter(rating=rating)
+
+    # Filter by feedback author
+    feedback_by = request.query_params.get("feedback_by")
+
+    if feedback_by:
+        if feedback_by not in ["user", "photographer"]:
+            return Response(
+                {
+                    "success": False,
+                    "message": "feedback_by must be 'user' or 'photographer'.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        feedbacks = feedbacks.filter(feedback_by=feedback_by)
+
+    # Filter by booking ID
+    booking_id = request.query_params.get("booking_id")
+
+    if booking_id:
+        try:
+            booking_id = int(booking_id)
+        except ValueError:
+            return Response(
+                {
+                    "success": False,
+                    "message": "booking_id must be an integer.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        feedbacks = feedbacks.filter(booking_id=booking_id)
+
+    # Serialize feedback records
+    serializer = AdminPhotographerFeedbackSerializer(
+        feedbacks,
+        many=True,
+    )
+
+    return Response(
+        {
+            "success": True,
+            "count": feedbacks.count(),
+            "data": serializer.data,
+        },
+        status=status.HTTP_200_OK,
     )
