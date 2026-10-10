@@ -121,6 +121,12 @@ urlpatterns = [
         name="update-verification-plan",
     ),
 
+    path(
+        "premium-verified-photographers/",
+        views.premium_verified_photographers,
+        name="premium-verified-photographers"
+    ),
+
 
 
     

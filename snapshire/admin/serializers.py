@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from user.models import UserProfile
-from photographer.models import PhotographerProfile,PhotographerWalletTransaction
+from photographer.models import PhotographerProfile,PhotographerWalletTransaction,VerificationPayment
 from user.models import Booking,Feedback,Payment,WalletTransaction
 from .models import PlatformFee,VerificationPlan
 from decimal import Decimal
@@ -636,4 +636,154 @@ class VerificationPlanSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "updated_at"]
 
 
+
+
+
+from rest_framework import serializers
+from photographer.models import VerificationPayment
+
+
+class PremiumVerificationSerializer(serializers.ModelSerializer):
+    photographer_id = serializers.IntegerField(
+        source="photographer.id",
+        read_only=True
+    )
+
+    full_name = serializers.SerializerMethodField()
+
+    username = serializers.CharField(
+        source="photographer.user.username",
+        read_only=True
+    )
+
+    email = serializers.EmailField(
+        source="photographer.user.email",
+        read_only=True
+    )
+
+    phone_number = serializers.CharField(
+        source="photographer.phone_number",
+        read_only=True
+    )
+
+    location = serializers.CharField(
+        source="photographer.location",
+        read_only=True
+    )
+
+    current_plan = serializers.CharField(
+        source="photographer.plan_mode",
+        read_only=True
+    )
+
+    class Meta:
+        model = VerificationPayment
+        fields = [
+            "id",
+            "photographer_id",
+            "full_name",
+            "username",
+            "email",
+            "phone_number",
+            "location",
+            "current_plan",
+            "plan_mode",
+            "amount",
+            "currency",
+            "status",
+            "razorpay_order_id",
+            "razorpay_payment_id",
+            "created_at",
+        ]
+
+    def get_full_name(self, obj):
+        user = obj.photographer.user
+        return user.get_full_name() or user.username
+
+
+
+
+
+from rest_framework import serializers
+from photographer.models import VerificationPayment
+
+
+class AdminVerificationWalletTransactionSerializer(serializers.ModelSerializer):
+    photographer_id = serializers.IntegerField(
+        source="photographer.id",
+        read_only=True
+    )
+    full_name = serializers.SerializerMethodField()
+    username = serializers.CharField(
+        source="photographer.user.username",
+        read_only=True
+    )
+    email = serializers.EmailField(
+        source="photographer.user.email",
+        read_only=True
+    )
+
+    class Meta:
+        model = VerificationPayment
+        fields = [
+            "id",
+            "photographer_id",
+            "full_name",
+            "username",
+            "email",
+            "plan_mode",
+            "amount",
+            "currency",
+            "status",
+            "razorpay_order_id",
+            "razorpay_payment_id",
+            "created_at",
+        ]
+
+    def get_full_name(self, obj):
+        user = obj.photographer.user
+        return user.get_full_name() or user.username
+    
+
+
+
+from rest_framework import serializers
+from photographer.models import VerificationPayment
+
+
+class AdminVerificationWalletTransactionSerializer(serializers.ModelSerializer):
+    photographer_id = serializers.IntegerField(
+        source="photographer.id",
+        read_only=True
+    )
+    full_name = serializers.SerializerMethodField()
+    username = serializers.CharField(
+        source="photographer.user.username",
+        read_only=True
+    )
+    email = serializers.EmailField(
+        source="photographer.user.email",
+        read_only=True
+    )
+
+    class Meta:
+        model = VerificationPayment
+        fields = [
+            "id",
+            "photographer_id",
+            "full_name",
+            "username",
+            "email",
+            "plan_mode",
+            "amount",
+            "currency",
+            "status",
+            "razorpay_order_id",
+            "razorpay_payment_id",
+            "created_at",
+        ]
+
+    def get_full_name(self, obj):
+        user = obj.photographer.user
+        return user.get_full_name() or user.username
 

@@ -11,7 +11,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from drf_yasg.utils import swagger_auto_schema
 
 from user.models import UserProfile,Booking,Feedback,Payment,WalletTransaction
-from photographer.models import PhotographerProfile
+from photographer.models import PhotographerProfile,VerificationPayment
 from .serializers import PendingPhotographerSerializer,AdminDashboardSerializer
 from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination
@@ -24,9 +24,12 @@ from .serializers import (
     AdminBookingManagementSerializer,PlatformFeeSerializer,
     AdminFeedbackSerializer,AdminWalletTransactionSerializer,
     AdminCancelledBookingSerializer,AdminPhotographerTransactionSerializer,
-    PhotographerWalletTransaction,AdminUserRefundTransactionSerializer
+    PhotographerWalletTransaction,AdminUserRefundTransactionSerializer,PremiumVerificationSerializer,
+    AdminWalletTransactionSerializer,
+    AdminVerificationWalletTransactionSerializer,
 )
 from .serializers import VerificationPlanSerializer
+from photographer.models import VerificationPayment
 
 
 # ===========================
@@ -644,21 +647,89 @@ from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
 
 
+# @swagger_auto_schema(
+#     method="get",
+#     responses={
+#         200: AdminWalletTransactionSerializer(many=True)
+#     }
+# )
+# @api_view(["GET"])
+# @permission_classes([IsAdminUser])
+# def admin_wallet(request):
+
+#     # -----------------------------------------
+#     # PAID ADVANCE PAYMENTS ONLY
+#     # -----------------------------------------
+
+#     payments = Payment.objects.filter(
+#         payment_type="advance",
+#         status="paid",
+#         booking__platform_fee__gt=0
+#     ).select_related(
+#         "booking",
+#         "booking__user",
+#         "booking__photographer",
+#         "booking__photographer__user"
+#     ).order_by("-created_at")
+
+#     # -----------------------------------------
+#     # ADMIN WALLET
+#     # ONLY PLATFORM FEES
+#     # -----------------------------------------
+
+#     total_balance = (
+#         payments.aggregate(
+#             total=Sum("booking__platform_fee")
+#         )["total"]
+#         or Decimal("0.00")
+#     )
+
+#     # -----------------------------------------
+#     # SERIALIZE TRANSACTIONS
+#     # -----------------------------------------
+
+#     serializer = AdminWalletTransactionSerializer(
+#         payments,
+#         many=True
+#     )
+
+#     # -----------------------------------------
+#     # RESPONSE
+#     # -----------------------------------------
+
+#     return Response(
+#         {
+#             "success": True,
+#             "message": "Admin wallet retrieved successfully.",
+
+#             "data": {
+#                 "total_balance": str(total_balance),
+
+#                 "transactions": serializer.data
+#             }
+#         },
+#         status=status.HTTP_200_OK
+#     )
+
 @swagger_auto_schema(
     method="get",
-    responses={
-        200: AdminWalletTransactionSerializer(many=True)
-    }
+    manual_parameters=[
+        openapi.Parameter(
+            name="page",
+            in_=openapi.IN_QUERY,
+            description="Enter the page number",
+            type=openapi.TYPE_INTEGER,
+            required=False,
+        ),
+        
+    ]
 )
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def admin_wallet(request):
 
-    # -----------------------------------------
-    # PAID ADVANCE PAYMENTS ONLY
-    # -----------------------------------------
-
-    payments = Payment.objects.filter(
+    # 1. Booking platform fee transactions
+    booking_payments = Payment.objects.filter(
         payment_type="advance",
         status="paid",
         booking__platform_fee__gt=0
@@ -669,44 +740,95 @@ def admin_wallet(request):
         "booking__photographer__user"
     ).order_by("-created_at")
 
-    # -----------------------------------------
-    # ADMIN WALLET
-    # ONLY PLATFORM FEES
-    # -----------------------------------------
+    booking_transactions = []
+    booking_total = Decimal("0.00")
+    processed_booking_ids = set()
 
-    total_balance = (
-        payments.aggregate(
-            total=Sum("booking__platform_fee")
-        )["total"]
-        or Decimal("0.00")
+    for payment in booking_payments:
+        booking = payment.booking
+
+        # Avoid counting a booking fee more than once
+        if booking.id in processed_booking_ids:
+            continue
+
+        processed_booking_ids.add(booking.id)
+        booking_total += booking.platform_fee
+
+        transaction = dict(
+            AdminWalletTransactionSerializer(payment).data
+        )
+        transaction["transaction_type"] = "booking_platform_fee"
+        transaction["wallet_credit"] = str(booking.platform_fee)
+        booking_transactions.append(transaction)
+
+    # 2. Gold and Platinum verification transactions
+    verification_payments = VerificationPayment.objects.filter(
+        plan_mode__in=["gold", "platinum"],
+        status="paid"
+    ).select_related(
+        "photographer",
+        "photographer__user"
+    ).order_by("-created_at")
+
+    verification_total = (
+        verification_payments.aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0.00")
     )
 
-    # -----------------------------------------
-    # SERIALIZE TRANSACTIONS
-    # -----------------------------------------
+    verification_transactions = []
 
-    serializer = AdminWalletTransactionSerializer(
-        payments,
-        many=True
+    for payment in verification_payments:
+        transaction = dict(
+            AdminVerificationWalletTransactionSerializer(payment).data
+        )
+        transaction["transaction_type"] = "premium_verification"
+        transaction["wallet_credit"] = str(payment.amount)
+        verification_transactions.append(transaction)
+
+    # 3. Combine and sort transactions
+    transactions = booking_transactions + verification_transactions
+    transactions.sort(
+        key=lambda item: item.get("created_at") or "",
+        reverse=True
     )
 
-    # -----------------------------------------
-    # RESPONSE
-    # -----------------------------------------
+    # 4. Pagination
+    paginator = PageNumberPagination()
+    paginator.page_size = 10
+    paginator.page_size_query_param = "page_size"
+    paginator.max_page_size = 100
+
+    paginated_transactions = paginator.paginate_queryset(
+        transactions, request
+    )
+
+    # 5. Combined totals
+    total_balance = booking_total + verification_total
 
     return Response(
         {
             "success": True,
             "message": "Admin wallet retrieved successfully.",
-
             "data": {
                 "total_balance": str(total_balance),
-
-                "transactions": serializer.data
-            }
+                "booking_platform_fee_total": str(booking_total),
+                "premium_verification_total": str(verification_total),
+                "transactions_count": len(transactions),
+                "count": paginator.page.paginator.count,
+                "total_pages": paginator.page.paginator.num_pages,
+                "current_page": paginator.page.number,
+                "next": paginator.get_next_link(),
+                "previous": paginator.get_previous_link(),
+                "transactions": paginated_transactions,
+            },
         },
-        status=status.HTTP_200_OK
+        status=status.HTTP_200_OK,
     )
+
+
+
+
 
 
 
@@ -928,4 +1050,66 @@ def update_verification_plan(request, plan_id):
     return Response(
         serializer.errors,
         status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+
+
+@swagger_auto_schema(
+    method="get",
+    manual_parameters=[
+        openapi.Parameter(
+            name="page",
+            in_=openapi.IN_QUERY,
+            description="Enter page number",
+            type=openapi.TYPE_INTEGER,
+            required=False,
+            default=1
+        )
+    ]
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def premium_verified_photographers(request):
+
+    if not request.user.is_staff:
+        return Response(
+            {
+                "success": False,
+                "message": "You do not have permission to access this data."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    payments = VerificationPayment.objects.filter(
+        plan_mode__in=["gold", "platinum"],
+        status="paid"
+    ).select_related(
+        "photographer__user"
+    ).order_by("-created_at")
+
+    paginator = PageNumberPagination()
+    paginator.page_size = 5
+
+    paginated_payments = paginator.paginate_queryset(
+        payments,
+        request
+    )
+
+    serializer = PremiumVerificationSerializer(
+        paginated_payments,
+        many=True
+    )
+
+    return Response(
+        {
+            "success": True,
+            "count": paginator.page.paginator.count,
+            "total_pages": paginator.page.paginator.num_pages,
+            "current_page": paginator.page.number,
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
+            "data": serializer.data
+        },
+        status=status.HTTP_200_OK
     )
