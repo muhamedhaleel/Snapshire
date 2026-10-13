@@ -712,33 +712,170 @@ from drf_yasg.utils import swagger_auto_schema
 #         status=status.HTTP_200_OK
 #     )
 
+# @swagger_auto_schema(
+#     method="get",
+#     manual_parameters=[
+#         openapi.Parameter(
+#             name="page",
+#             in_=openapi.IN_QUERY,
+#             description="Enter the page number",
+#             type=openapi.TYPE_INTEGER,
+#             required=False,
+#         ),
+        
+#     ]
+# )
+# @api_view(["GET"])
+# @permission_classes([IsAdminUser])
+# def admin_wallet(request):
+
+#     # 1. Booking platform fee transactions
+#     booking_payments = Payment.objects.filter(
+#         payment_type="advance",
+#         status="paid",
+#         booking__platform_fee__gt=0
+#     ).select_related(
+#         "booking",
+#         "booking__user",
+#         "booking__photographer",
+#         "booking__photographer__user"
+#     ).order_by("-created_at")
+
+#     booking_transactions = []
+#     booking_total = Decimal("0.00")
+#     processed_booking_ids = set()
+
+#     for payment in booking_payments:
+#         booking = payment.booking
+
+#         # Avoid counting a booking fee more than once
+#         if booking.id in processed_booking_ids:
+#             continue
+
+#         processed_booking_ids.add(booking.id)
+#         booking_total += booking.platform_fee
+
+#         transaction = dict(
+#             AdminWalletTransactionSerializer(payment).data
+#         )
+#         transaction["transaction_type"] = "booking_platform_fee"
+#         transaction["wallet_credit"] = str(booking.platform_fee)
+#         booking_transactions.append(transaction)
+
+#     # 2. Gold and Platinum verification transactions
+#     verification_payments = VerificationPayment.objects.filter(
+#         plan_mode__in=["gold", "platinum"],
+#         status="paid"
+#     ).select_related(
+#         "photographer",
+#         "photographer__user"
+#     ).order_by("-created_at")
+
+#     verification_total = (
+#         verification_payments.aggregate(
+#             total=Sum("amount")
+#         )["total"] or Decimal("0.00")
+#     )
+
+#     verification_transactions = []
+
+#     for payment in verification_payments:
+#         transaction = dict(
+#             AdminVerificationWalletTransactionSerializer(payment).data
+#         )
+#         transaction["transaction_type"] = "premium_verification"
+#         transaction["wallet_credit"] = str(payment.amount)
+#         verification_transactions.append(transaction)
+
+#     # 3. Combine and sort transactions
+#     transactions = booking_transactions + verification_transactions
+#     transactions.sort(
+#         key=lambda item: item.get("created_at") or "",
+#         reverse=True
+#     )
+
+#     # 4. Pagination
+#     paginator = PageNumberPagination()
+#     paginator.page_size = 10
+#     paginator.page_size_query_param = "page_size"
+#     paginator.max_page_size = 100
+
+#     paginated_transactions = paginator.paginate_queryset(
+#         transactions, request
+#     )
+
+#     # 5. Combined totals
+#     total_balance = booking_total + verification_total
+
+#     return Response(
+#         {
+#             "success": True,
+#             "message": "Admin wallet retrieved successfully.",
+#             "data": {
+#                 "total_balance": str(total_balance),
+#                 "booking_platform_fee_total": str(booking_total),
+#                 "premium_verification_total": str(verification_total),
+#                 "transactions_count": len(transactions),
+#                 "count": paginator.page.paginator.count,
+#                 "total_pages": paginator.page.paginator.num_pages,
+#                 "current_page": paginator.page.number,
+#                 "next": paginator.get_next_link(),
+#                 "previous": paginator.get_previous_link(),
+#                 "transactions": paginated_transactions,
+#             },
+#         },
+#         status=status.HTTP_200_OK,
+#     )
+
+
+
+from decimal import Decimal
+
+from django.db.models import Sum
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAdminUser
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.response import Response
+
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
+
+
+
+
 @swagger_auto_schema(
     method="get",
     manual_parameters=[
         openapi.Parameter(
-            name="page",
-            in_=openapi.IN_QUERY,
-            description="Enter the page number",
+            "page",
+            openapi.IN_QUERY,
+            description="Page number",
             type=openapi.TYPE_INTEGER,
             required=False,
         ),
-        
-    ]
+        openapi.Parameter(
+            "page_size",
+            openapi.IN_QUERY,
+            description="Transactions per page",
+            type=openapi.TYPE_INTEGER,
+            required=False,
+        ),
+    ],
 )
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def admin_wallet(request):
-
-    # 1. Booking platform fee transactions
+    # Booking platform-fee transactions
     booking_payments = Payment.objects.filter(
         payment_type="advance",
-        status="paid",
-        booking__platform_fee__gt=0
+        status__in=["paid", "refunded"],
+        booking__platform_fee__gt=0,
     ).select_related(
         "booking",
         "booking__user",
         "booking__photographer",
-        "booking__photographer__user"
+        "booking__photographer__user",
     ).order_by("-created_at")
 
     booking_transactions = []
@@ -748,33 +885,37 @@ def admin_wallet(request):
     for payment in booking_payments:
         booking = payment.booking
 
-        # Avoid counting a booking fee more than once
+        # Count a booking's platform fee only once
         if booking.id in processed_booking_ids:
             continue
 
         processed_booking_ids.add(booking.id)
-        booking_total += booking.platform_fee
+
+        platform_fee = booking.platform_fee
+        booking_total += platform_fee
 
         transaction = dict(
             AdminWalletTransactionSerializer(payment).data
         )
         transaction["transaction_type"] = "booking_platform_fee"
-        transaction["wallet_credit"] = str(booking.platform_fee)
+        transaction["wallet_credit"] = str(platform_fee)
+
         booking_transactions.append(transaction)
 
-    # 2. Gold and Platinum verification transactions
+    # Premium-verification transactions
     verification_payments = VerificationPayment.objects.filter(
         plan_mode__in=["gold", "platinum"],
-        status="paid"
+        status="paid",
     ).select_related(
         "photographer",
-        "photographer__user"
+        "photographer__user",
     ).order_by("-created_at")
 
     verification_total = (
         verification_payments.aggregate(
             total=Sum("amount")
-        )["total"] or Decimal("0.00")
+        )["total"]
+        or Decimal("0.00")
     )
 
     verification_transactions = []
@@ -785,26 +926,27 @@ def admin_wallet(request):
         )
         transaction["transaction_type"] = "premium_verification"
         transaction["wallet_credit"] = str(payment.amount)
+
         verification_transactions.append(transaction)
 
-    # 3. Combine and sort transactions
+    # Combine and sort transactions
     transactions = booking_transactions + verification_transactions
     transactions.sort(
         key=lambda item: item.get("created_at") or "",
-        reverse=True
+        reverse=True,
     )
 
-    # 4. Pagination
+    # Pagination
     paginator = PageNumberPagination()
     paginator.page_size = 10
     paginator.page_size_query_param = "page_size"
     paginator.max_page_size = 100
 
     paginated_transactions = paginator.paginate_queryset(
-        transactions, request
+        transactions,
+        request,
     )
 
-    # 5. Combined totals
     total_balance = booking_total + verification_total
 
     return Response(
@@ -826,6 +968,7 @@ def admin_wallet(request):
         },
         status=status.HTTP_200_OK,
     )
+
 
 
 

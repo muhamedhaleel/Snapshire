@@ -1761,7 +1761,28 @@ def photographer_reschedule_requests(request):
     )
 
 
+def check_photographer_availability(
+    photographer,
+    selected_date,
+    session,
+    exclude_booking_id=None
+):
+    bookings = Booking.objects.filter(
+        photographer=photographer,
+        date=selected_date,
+        session=session,
+        status__in=[
+            "photographer_accepted",
+            "confirmed",
+        ],
+    )
 
+    if exclude_booking_id is not None:
+        bookings = bookings.exclude(
+            id=exclude_booking_id
+        )
+
+    return not bookings.exists()
 
 
 

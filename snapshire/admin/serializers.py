@@ -262,83 +262,83 @@ class AdminFeedbackSerializer(serializers.ModelSerializer):
         ).strip()
 
 
-class AdminWalletTransactionSerializer(serializers.ModelSerializer):
+# class AdminWalletTransactionSerializer(serializers.ModelSerializer):
 
-    booking_id = serializers.IntegerField(
-        source="booking.id",
-        read_only=True
-    )
+#     booking_id = serializers.IntegerField(
+#         source="booking.id",
+#         read_only=True
+#     )
 
-    user_name = serializers.SerializerMethodField()
+#     user_name = serializers.SerializerMethodField()
 
-    photographer_name = serializers.SerializerMethodField()
+#     photographer_name = serializers.SerializerMethodField()
 
-    total_amount = serializers.SerializerMethodField()
+#     total_amount = serializers.SerializerMethodField()
 
-    platform_fee = serializers.DecimalField(
-        source="booking.platform_fee",
-        max_digits=10,
-        decimal_places=2,
-        read_only=True
-    )
+#     platform_fee = serializers.DecimalField(
+#         source="booking.platform_fee",
+#         max_digits=10,
+#         decimal_places=2,
+#         read_only=True
+#     )
 
-    payment_status = serializers.CharField(
-        source="status",
-        read_only=True
-    )
+#     payment_status = serializers.CharField(
+#         source="status",
+#         read_only=True
+#     )
 
-    payment_date = serializers.DateTimeField(
-        source="created_at",
-        read_only=True
-    )
+#     payment_date = serializers.DateTimeField(
+#         source="created_at",
+#         read_only=True
+#     )
 
-    class Meta:
-        model = Payment
-        fields = [
-            "booking_id",
-            "user_name",
-            "photographer_name",
-            "total_amount",
-            "platform_fee",
-            "payment_status",
-            "payment_date",
-        ]
+#     class Meta:
+#         model = Payment
+#         fields = [
+#             "booking_id",
+#             "user_name",
+#             "photographer_name",
+#             "total_amount",
+#             "platform_fee",
+#             "payment_status",
+#             "payment_date",
+#         ]
 
-    def get_user_name(self, obj):
+#     def get_user_name(self, obj):
 
-        user = obj.booking.user
+#         user = obj.booking.user
 
-        full_name = (
-            f"{user.first_name} "
-            f"{user.last_name}"
-        ).strip()
+#         full_name = (
+#             f"{user.first_name} "
+#             f"{user.last_name}"
+#         ).strip()
 
-        return full_name or user.username
+#         return full_name or user.username
 
-    def get_photographer_name(self, obj):
+#     def get_photographer_name(self, obj):
 
-        photographer = obj.booking.photographer
+#         photographer = obj.booking.photographer
 
-        if not photographer:
-            return ""
+#         if not photographer:
+#             return ""
 
-        user = photographer.user
+#         user = photographer.user
 
-        full_name = (
-            f"{user.first_name} "
-            f"{user.last_name}"
-        ).strip()
+#         full_name = (
+#             f"{user.first_name} "
+#             f"{user.last_name}"
+#         ).strip()
 
-        return full_name or user.username
+#         return full_name or user.username
 
-    def get_total_amount(self, obj):
+#     def get_total_amount(self, obj):
 
-        booking = obj.booking
+#         booking = obj.booking
 
-        return (
-            booking.photographer_amount +
-            booking.platform_fee
-        )
+#         return (
+#             booking.photographer_amount +
+#             booking.platform_fee
+#         )
 
 
 class AdminCancelledBookingSerializer(serializers.ModelSerializer):
@@ -751,41 +751,41 @@ from rest_framework import serializers
 from photographer.models import VerificationPayment
 
 
-class AdminVerificationWalletTransactionSerializer(serializers.ModelSerializer):
-    photographer_id = serializers.IntegerField(
-        source="photographer.id",
-        read_only=True
-    )
-    full_name = serializers.SerializerMethodField()
-    username = serializers.CharField(
-        source="photographer.user.username",
-        read_only=True
-    )
-    email = serializers.EmailField(
-        source="photographer.user.email",
-        read_only=True
-    )
+# class AdminVerificationWalletTransactionSerializer(serializers.ModelSerializer):
+#     photographer_id = serializers.IntegerField(
+#         source="photographer.id",
+#         read_only=True
+#     )
+#     full_name = serializers.SerializerMethodField()
+#     username = serializers.CharField(
+#         source="photographer.user.username",
+#         read_only=True
+#     )
+#     email = serializers.EmailField(
+#         source="photographer.user.email",
+#         read_only=True
+#     )
 
-    class Meta:
-        model = VerificationPayment
-        fields = [
-            "id",
-            "photographer_id",
-            "full_name",
-            "username",
-            "email",
-            "plan_mode",
-            "amount",
-            "currency",
-            "status",
-            "razorpay_order_id",
-            "razorpay_payment_id",
-            "created_at",
-        ]
+#     class Meta:
+#         model = VerificationPayment
+#         fields = [
+#             "id",
+#             "photographer_id",
+#             "full_name",
+#             "username",
+#             "email",
+#             "plan_mode",
+#             "amount",
+#             "currency",
+#             "status",
+#             "razorpay_order_id",
+#             "razorpay_payment_id",
+#             "created_at",
+#         ]
 
-    def get_full_name(self, obj):
-        user = obj.photographer.user
-        return user.get_full_name() or user.username
+#     def get_full_name(self, obj):
+#         user = obj.photographer.user
+#         return user.get_full_name() or user.username
 
 
 
@@ -853,3 +853,58 @@ class AdminPhotographerFeedbackSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+class AdminWalletTransactionSerializer(serializers.ModelSerializer):
+    booking_id = serializers.IntegerField(
+        source="booking.id",
+        read_only=True,
+    )
+    user_name = serializers.CharField(
+        source="booking.user.username",
+        read_only=True,
+    )
+    photographer_name = serializers.CharField(
+        source="booking.photographer.user.username",
+        read_only=True,
+    )
+    platform_fee = serializers.DecimalField(
+        source="booking.platform_fee",
+        max_digits=10,
+        decimal_places=2,
+        read_only=True,
+    )
+
+    class Meta:
+        model = Payment
+        fields = [
+            "id",
+            "booking_id",
+            "user_name",
+            "photographer_name",
+            "payment_type",
+            
+            "status",
+            "platform_fee",
+            "created_at",
+        ]
+
+
+class AdminVerificationWalletTransactionSerializer(
+    serializers.ModelSerializer
+):
+    photographer_name = serializers.CharField(
+        source="photographer.user.username",
+        read_only=True,
+    )
+
+    class Meta:
+        model = VerificationPayment
+        fields = [
+            "id",
+            "photographer_name",
+            "plan_mode",
+            
+            "status",
+            "created_at",
+
+        ]
