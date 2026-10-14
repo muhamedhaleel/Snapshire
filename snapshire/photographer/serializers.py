@@ -777,3 +777,21 @@ class PhotographerFeedbackSerializer(serializers.ModelSerializer):
             "feedback_by",
             "created_at",
         ]
+class PhotographerAddedFeedbackSerializer(serializers.ModelSerializer):
+    booking_id = serializers.IntegerField(read_only=True)
+    user_name = serializers.CharField(
+        source="user.username",
+        read_only=True
+    )
+
+    class Meta:
+        model = Feedback
+        fields = [
+            "id",
+            "booking_id",
+            "user_name",
+            "rating",
+            "comment",
+            "feedback_by",
+            "created_at",
+        ]

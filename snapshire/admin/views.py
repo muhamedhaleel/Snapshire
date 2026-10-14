@@ -850,17 +850,10 @@ from drf_yasg.utils import swagger_auto_schema
         openapi.Parameter(
             "page",
             openapi.IN_QUERY,
-            description="Page number",
             type=openapi.TYPE_INTEGER,
             required=False,
         ),
-        openapi.Parameter(
-            "page_size",
-            openapi.IN_QUERY,
-            description="Transactions per page",
-            type=openapi.TYPE_INTEGER,
-            required=False,
-        ),
+        
     ],
 )
 @api_view(["GET"])

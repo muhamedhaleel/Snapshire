@@ -134,9 +134,15 @@ urlpatterns = [
     ),
 
     path(
-    "Add-feedback/submit/",
+    "Add-Booking-Feedback/",
     views.submit_photographer_feedback,
     name="submit-photographer-feedback"
+    ),
+
+    path(
+    "Booking-Feedback/list/",
+    views.list_photographer_added_feedback,
+    name="list-photographer-added-feedback",
     ),
 
 ]

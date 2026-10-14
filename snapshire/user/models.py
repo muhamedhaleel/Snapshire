@@ -241,10 +241,10 @@ class Payment(models.Model):
 
 class Feedback(models.Model):
 
-    booking = models.OneToOneField(
+    booking = models.ForeignKey(
         Booking,
         on_delete=models.CASCADE,
-        related_name="feedback"
+        related_name="feedbacks"
     )
 
     user = models.ForeignKey(
@@ -276,10 +276,19 @@ class Feedback(models.Model):
     default="user",
     )
 
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["booking", "feedback_by"],
+                name="unique_feedback_per_booking_and_type",
+            )
+        ]
+
     def __str__(self):
 
         return (
-            f"{self.photographer.user.username} "
+            f"{self.photographer.user.username}"
             f"- {self.rating} stars"
         )
     
