@@ -144,6 +144,33 @@ def signup(request):
         status=status.HTTP_400_BAD_REQUEST
     )
 
+# @swagger_auto_schema(
+#     method="post",
+#     request_body=LoginSerializer,
+#     responses={200: "Login Successful"}
+# )
+# @api_view(["POST"])
+# @parser_classes([FormParser])
+# def login(request):
+
+#     serializer = LoginSerializer(data=request.data)
+
+#     if serializer.is_valid():
+
+#         user = serializer.validated_data["user"]
+
+#         refresh = RefreshToken.for_user(user)
+
+#         return Response({
+#             "message": "Login Successful",
+#             "access": str(refresh.access_token),
+#             "refresh": str(refresh),
+#             "username": user.username,
+#             "email": user.email,
+#         })
+
+#     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 @swagger_auto_schema(
     method="post",
     request_body=LoginSerializer,
@@ -152,12 +179,21 @@ def signup(request):
 @api_view(["POST"])
 @parser_classes([FormParser])
 def login(request):
-
     serializer = LoginSerializer(data=request.data)
 
     if serializer.is_valid():
-
         user = serializer.validated_data["user"]
+
+        # Reject photographer accounts from user login
+        try:
+            user.photographer_profile
+        except PhotographerProfile.DoesNotExist:
+            pass
+        else:
+            return Response(
+                {"error": "This is a photographer account. Please use photographer login."},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
         refresh = RefreshToken.for_user(user)
 
@@ -167,9 +203,13 @@ def login(request):
             "refresh": str(refresh),
             "username": user.username,
             "email": user.email,
-        })
+        }, status=status.HTTP_200_OK)
 
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST
+    )
+
 
 
 @swagger_auto_schema(

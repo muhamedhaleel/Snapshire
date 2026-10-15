@@ -36,11 +36,11 @@ urlpatterns = [
     name="accept-booking-request"
 ),
 
-    path(
-    "booking/<int:booking_id>/reject/",
-    views.reject_booking_request,
-    name="reject-booking-request"
-),
+#     path(
+#     "booking/<int:booking_id>/reject/",
+#     views.reject_booking_request,
+#     name="reject-booking-request"
+# ),
     path(
     "my-bookings/",
     views.photographer_my_bookings,

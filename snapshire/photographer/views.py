@@ -189,6 +189,55 @@ None,
         status=status.HTTP_400_BAD_REQUEST
     )
 
+# @swagger_auto_schema(
+#     method="post",
+#     request_body=LoginSerializer,
+#     responses={200: "Login Successful"}
+# )
+# @api_view(["POST"])
+# @parser_classes([FormParser])
+# def login(request):
+
+#     serializer = LoginSerializer(data=request.data)
+
+#     if serializer.is_valid():
+
+#         user = serializer.validated_data["user"]
+
+#         # Check whether this user has a photographer profile
+#         try:
+#             user.photographer_profile
+#         except:
+#             return Response(
+#                 {
+#                     "error": "Photographer account not found."
+#                 },
+#                 status=status.HTTP_404_NOT_FOUND
+#             )
+
+#         refresh = RefreshToken.for_user(user)
+
+#         return Response(
+#             {
+#                 "message": "Login Successful",
+
+#                 "access": str(refresh.access_token),
+
+#                 "refresh": str(refresh),
+
+#                 "username": user.username,
+
+#                 "email": user.email,
+#             },
+#             status=status.HTTP_200_OK
+#         )
+
+#     return Response(
+#         serializer.errors,
+#         status=status.HTTP_400_BAD_REQUEST
+#     )
+
+
 @swagger_auto_schema(
     method="post",
     request_body=LoginSerializer,
@@ -197,46 +246,34 @@ None,
 @api_view(["POST"])
 @parser_classes([FormParser])
 def login(request):
-
     serializer = LoginSerializer(data=request.data)
 
     if serializer.is_valid():
-
         user = serializer.validated_data["user"]
 
         # Check whether this user has a photographer profile
         try:
             user.photographer_profile
-        except:
+        except PhotographerProfile.DoesNotExist:
             return Response(
-                {
-                    "error": "Photographer account not found."
-                },
-                status=status.HTTP_404_NOT_FOUND
+                {"error": "Photographer account not found."},
+                status=status.HTTP_403_FORBIDDEN
             )
 
         refresh = RefreshToken.for_user(user)
 
-        return Response(
-            {
-                "message": "Login Successful",
-
-                "access": str(refresh.access_token),
-
-                "refresh": str(refresh),
-
-                "username": user.username,
-
-                "email": user.email,
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response({
+            "message": "Login Successful",
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "username": user.username,
+            "email": user.email,
+        }, status=status.HTTP_200_OK)
 
     return Response(
         serializer.errors,
         status=status.HTTP_400_BAD_REQUEST
     )
-
 @swagger_auto_schema(
     method="put",
     request_body=UpdatePhotographerProfileSerializer,

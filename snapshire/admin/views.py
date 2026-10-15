@@ -603,9 +603,16 @@ def admin_dashboard(request):
 
 @swagger_auto_schema(
     method="get",
-    responses={
-        200: AdminFeedbackSerializer(many=True)
-    }
+    manual_parameters=[
+
+        openapi.Parameter(
+            "page",
+            openapi.IN_QUERY,
+            description="Enter page number",
+            type=openapi.TYPE_INTEGER,
+            required=False,
+        ),
+    ],
 )
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
@@ -618,15 +625,28 @@ def admin_feedback_list(request):
         "photographer__user"
     ).order_by("-created_at")
 
-    serializer = AdminFeedbackSerializer(
+    paginator = PageNumberPagination()
+    paginator.page_size = 10
+
+    paginated_feedbacks = paginator.paginate_queryset(
         feedbacks,
+        request,
+    )
+
+    serializer = AdminFeedbackSerializer(
+        paginated_feedbacks,
         many=True
     )
 
     return Response(
         {
             "success": True,
-            "count": feedbacks.count(),
+            "count": paginator.page.paginator.count,
+            "total_pages": paginator.page.paginator.num_pages,
+            "current_page": paginator.page.number,
+            "page_size": 10,
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
             "results": serializer.data
         },
         status=status.HTTP_200_OK
@@ -1285,10 +1305,11 @@ def admin_view_reschedule_requests(request):
     method="get",
     manual_parameters=[
         openapi.Parameter(
-            "rating",
+            "page",
             openapi.IN_QUERY,
-            description="Filter feedback by rating (1-5)",
+            description="Enter page number",
             type=openapi.TYPE_INTEGER,
+            required=False,
         ),
         
     ],
@@ -1362,16 +1383,29 @@ def photographer_feedback_for_bookings(request):
 
         feedbacks = feedbacks.filter(booking_id=booking_id)
 
+    paginator = PageNumberPagination()
+    paginator.page_size = 10
+
+    paginated_feedbacks = paginator.paginate_queryset(
+        feedbacks,
+        request,
+    )
+
     # Serialize feedback records
     serializer = AdminPhotographerFeedbackSerializer(
-        feedbacks,
+        paginated_feedbacks,
         many=True,
     )
 
     return Response(
         {
             "success": True,
-            "count": feedbacks.count(),
+            "count": paginator.page.paginator.count,
+            "total_pages": paginator.page.paginator.num_pages,
+            "current_page": paginator.page.number,
+            "page_size": 10,
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
             "data": serializer.data,
         },
         status=status.HTTP_200_OK,
