@@ -2148,6 +2148,7 @@ def reject_reschedule(request, reschedule_id):
 
 
 class PhotographerGoogleLoginView(APIView):
+   
 
     @swagger_auto_schema(
         request_body=PhotographerGoogleLoginSerializer
