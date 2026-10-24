@@ -450,9 +450,21 @@ def verification(request):
         },
         status=status.HTTP_200_OK,
     )
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def photographer_notifications(request):
+
+    # Check photographer profile first
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
     response = check_photographer_verification(request)
     if response:
         return response
@@ -466,7 +478,8 @@ def photographer_notifications(request):
         many=True
     )
 
-    return Response(serializer.data)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 @swagger_auto_schema(
     method="post",
@@ -547,6 +560,15 @@ def create_weekly_availability(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_weekly_availability(request):
+
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
     response = check_photographer_verification(request)
     if response:
         return response
@@ -751,6 +773,14 @@ def create_availability_exception(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_availability_exceptions(request):
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
     response = check_photographer_verification(request)
     if response:
         return response
@@ -1156,10 +1186,7 @@ def reject_booking_request(request, booking_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def photographer_my_bookings(request):
-    response = check_photographer_verification(request)
-    if response:
-        return response
-
+    
     if not hasattr(request.user, "photographer_profile"):
         return Response(
             {
@@ -1168,6 +1195,9 @@ def photographer_my_bookings(request):
             },
             status=status.HTTP_403_FORBIDDEN
         )
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     photographer = request.user.photographer_profile
 
@@ -1434,6 +1464,14 @@ def photographer_dashboard(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def view_service_charges(request):
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
     response = check_photographer_verification(request)
     if response:
         return response
