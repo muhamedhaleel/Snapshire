@@ -308,6 +308,15 @@ def profile_update(request):
 @permission_classes([IsAuthenticated])
 def profile(request):
 
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
     serializer = PhotographerProfileSerializer(
         request.user.photographer_profile
     )
@@ -2185,8 +2194,91 @@ def reject_reschedule(request, reschedule_id):
     )
 
 
-class PhotographerGoogleLoginView(APIView):
+# class PhotographerGoogleLoginView(APIView):
    
+
+#     @swagger_auto_schema(
+#         request_body=PhotographerGoogleLoginSerializer
+#     )
+#     def post(self, request):
+#         serializer = PhotographerGoogleLoginSerializer(
+#             data=request.data
+#         )
+
+#         if not serializer.is_valid():
+#             return Response(
+#                 serializer.errors,
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
+
+#         try:
+#             google_user = id_token.verify_oauth2_token(
+#                 serializer.validated_data["id_token"],
+#                 requests.Request(),
+#                 settings.GOOGLE_CLIENT_ID
+#             )
+#         except ValueError:
+#             return Response({
+#                 "success": False,
+#                 "message": "Invalid Google ID token."
+#             }, status=status.HTTP_400_BAD_REQUEST)
+
+#         email = (google_user.get("email") or "").strip()
+
+#         if not email or google_user.get("email_verified") is not True:
+#             return Response({
+#                 "success": False,
+#                 "message": "A verified Google email is required."
+#             }, status=status.HTTP_400_BAD_REQUEST)
+
+#         user = User.objects.filter(email__iexact=email).first()
+
+#         if not user:
+#             return Response({
+#                 "success": False,
+#                 "message": (
+#                     "Photographer account not found. "
+#                     "Please register as a photographer first."
+#                 )
+#             }, status=status.HTTP_404_NOT_FOUND)
+
+#         # Block normal-user accounts and conflicting roles
+#         if UserProfile.objects.filter(user=user).exists():
+#             return Response({
+#                 "success": False,
+#                 "message": (
+#                     "This email belongs to a normal user. "
+#                     "Please use User Login."
+#                 )
+#             }, status=status.HTTP_403_FORBIDDEN)
+
+#         photographer = PhotographerProfile.objects.filter(
+#             user=user
+#         ).first()
+
+#         if not photographer:
+#             return Response({
+#                 "success": False,
+#                 "message": "Photographer profile not found."
+#             }, status=status.HTTP_404_NOT_FOUND)
+
+#         refresh = RefreshToken.for_user(user)
+
+#         return Response({
+#             "success": True,
+#             "message": "Photographer Google login successful.",
+#             "access": str(refresh.access_token),
+#             "refresh": str(refresh),
+#             "photographer": {
+#                 "id": photographer.id,
+#                 "user_id": user.id,
+#                 "username": user.username,
+#                 "email": user.email,
+#                 "verification_status": photographer.verification_status,
+#                 "is_verified": photographer.is_verified
+#             }
+#         }, status=status.HTTP_200_OK)
+class PhotographerGoogleLoginView(APIView):
 
     @swagger_auto_schema(
         request_body=PhotographerGoogleLoginSerializer
@@ -2222,36 +2314,66 @@ class PhotographerGoogleLoginView(APIView):
                 "message": "A verified Google email is required."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        user = User.objects.filter(email__iexact=email).first()
+        try:
+            with transaction.atomic():
+                user = User.objects.filter(
+                    email__iexact=email
+                ).first()
 
-        if not user:
+                if user:
+                    # Don't allow normal users to log in as photographers.
+                    if UserProfile.objects.filter(user=user).exists():
+                        return Response({
+                            "success": False,
+                            "message": (
+                                "This email belongs to a normal user. "
+                                "Please use User Login."
+                            )
+                        }, status=status.HTTP_403_FORBIDDEN)
+
+                    photographer = PhotographerProfile.objects.filter(
+                        user=user
+                    ).first()
+
+                    if not photographer:
+                        return Response({
+                            "success": False,
+                            "message": (
+                                "This email has no photographer account. "
+                                "Please register as a photographer first."
+                            )
+                        }, status=status.HTTP_404_NOT_FOUND)
+
+                else:
+                    # Create a new photographer account.
+                    username = email
+
+                    if User.objects.filter(username=username).exists():
+                        return Response({
+                            "success": False,
+                            "message": (
+                                "This username is already in use. "
+                                "Please contact support."
+                            )
+                        }, status=status.HTTP_409_CONFLICT)
+
+                    user = User.objects.create_user(
+                        username=username,
+                        email=email
+                    )
+
+                    photographer = PhotographerProfile.objects.create(
+                        user=user
+                    )
+
+        except Exception:
+            # Log the actual exception on the server in production.
             return Response({
                 "success": False,
                 "message": (
-                    "Photographer account not found. "
-                    "Please register as a photographer first."
+                    "Unable to create or access the photographer account."
                 )
-            }, status=status.HTTP_404_NOT_FOUND)
-
-        # Block normal-user accounts and conflicting roles
-        if UserProfile.objects.filter(user=user).exists():
-            return Response({
-                "success": False,
-                "message": (
-                    "This email belongs to a normal user. "
-                    "Please use User Login."
-                )
-            }, status=status.HTTP_403_FORBIDDEN)
-
-        photographer = PhotographerProfile.objects.filter(
-            user=user
-        ).first()
-
-        if not photographer:
-            return Response({
-                "success": False,
-                "message": "Photographer profile not found."
-            }, status=status.HTTP_404_NOT_FOUND)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         refresh = RefreshToken.for_user(user)
 

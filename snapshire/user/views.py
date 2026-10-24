@@ -58,7 +58,21 @@ from rest_framework.parsers import (
     FormParser,
     MultiPartParser
 )
+from rest_framework.permissions import BasePermission
 
+class IsNormalUser(BasePermission):
+    message = "You are not a normal user."
+
+    def has_permission(self, request, view):
+        user = request.user
+
+        if not user or not user.is_authenticated:
+            return False
+
+        return (
+            UserProfile.objects.filter(user=user).exists()
+            and not PhotographerProfile.objects.filter(user=user).exists()
+        )
 
 
 
@@ -254,7 +268,7 @@ def profile_update(request):
     responses={200: UpdateProfileSerializer}
 )
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated,IsNormalUser])
 def profile(request):
 
     profile, created = UserProfile.objects.get_or_create(
