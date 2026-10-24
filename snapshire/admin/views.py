@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from rest_framework.permissions import IsAuthenticated
-
+from django.db.models import Count, Sum, Q
 from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes, permission_classes
 from rest_framework.parsers import FormParser
@@ -556,37 +556,110 @@ def set_platform_fee(request):
 
 @swagger_auto_schema(
     method="get",
-    responses={200: AdminDashboardSerializer}
+    responses={200: AdminDashboardSerializer},
 )
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def admin_dashboard(request):
 
+    # 1. Existing overview metrics
     total_users = User.objects.count()
-
     total_photographers = PhotographerProfile.objects.count()
-
     total_bookings = Booking.objects.count()
 
-    total_verified_photographers = PhotographerProfile.objects.filter(
-        is_verified=True
+    total_verified_photographers = (
+        PhotographerProfile.objects.filter(is_verified=True).count()
+    )
+
+    total_gold_photographers = (
+        PhotographerProfile.objects.filter(plan_mode="gold").count()
+    )
+
+    total_platinum_photographers = (
+        PhotographerProfile.objects.filter(plan_mode="platinum").count()
+    )
+
+    # 2. Booking status summary: only statuses with existing bookings
+    booking_status = {
+        item["status"]: item["count"]
+        for item in Booking.objects.values("status").annotate(
+            count=Count("id")
+        )
+    }
+
+    # 3. Successful booking payments
+    paid_payments = Payment.objects.filter(status="paid")
+
+    payment_totals = paid_payments.aggregate(
+        total_collected=Sum("amount"),
+        advance_collected=Sum(
+            "amount",
+            filter=Q(payment_type="advance"),
+        ),
+        balance_collected=Sum(
+            "amount",
+            filter=Q(payment_type="balance"),
+        ),
+    )
+
+    total_collected = (
+        payment_totals["total_collected"] or Decimal("0.00")
+    )
+    advance_collected = (
+        payment_totals["advance_collected"] or Decimal("0.00")
+    )
+    balance_collected = (
+        payment_totals["balance_collected"] or Decimal("0.00")
+    )
+
+    failed_payment_count = Payment.objects.filter(
+        status="failed"
     ).count()
 
-    total_gold_photographers = PhotographerProfile.objects.filter(
-        plan_mode="gold"
+    # 4. Subscription overview
+    # Counts are available from PhotographerProfile.
+    # Actual subscription revenue requires subscription-payment records.
+    subscription_revenue = {
+        "gold": Decimal("0.00"),
+        "platinum": Decimal("0.00"),
+        "total": Decimal("0.00"),
+    }
+
+    # 5. Admin action counts
+    bookings_waiting_admin = Booking.objects.filter(
+        status="waiting_admin"
     ).count()
 
-    total_platinum_photographers = PhotographerProfile.objects.filter(
-        plan_mode="platinum"
-    ).count()
+    photographers_awaiting_verification = (
+        PhotographerProfile.objects.filter(is_verified=False).count()
+    )
 
+    # 6. Response data
     data = {
+        # Existing fields
         "total_users": total_users,
         "total_photographers": total_photographers,
         "total_bookings": total_bookings,
         "total_verified_photographers": total_verified_photographers,
         "total_gold_photographers": total_gold_photographers,
         "total_platinum_photographers": total_platinum_photographers,
+
+        # Booking analytics
+        "booking_status": booking_status,
+
+        # Booking-payment analytics
+        "total_collected": total_collected,
+        "advance_collected": advance_collected,
+        "balance_collected": balance_collected,
+        "failed_payment_count": failed_payment_count,
+
+        # Subscription analytics
+        "subscription_revenue": subscription_revenue,
+
+        # Admin actions
+        "bookings_waiting_admin": bookings_waiting_admin,
+        "photographers_awaiting_verification":
+            photographers_awaiting_verification,
     }
 
     serializer = AdminDashboardSerializer(data)
@@ -595,11 +668,10 @@ def admin_dashboard(request):
         {
             "success": True,
             "message": "Admin dashboard data retrieved successfully.",
-            "data": serializer.data
+            "data": serializer.data,
         },
-        status=status.HTTP_200_OK
+        status=status.HTTP_200_OK,
     )
-
 
 @swagger_auto_schema(
     method="get",

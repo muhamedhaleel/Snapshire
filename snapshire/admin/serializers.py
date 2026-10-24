@@ -212,6 +212,33 @@ class AdminDashboardSerializer(serializers.Serializer):
     total_gold_photographers = serializers.IntegerField()
     total_platinum_photographers = serializers.IntegerField()
 
+    booking_status = serializers.DictField(
+        child=serializers.IntegerField()
+    )
+
+    total_collected = serializers.DecimalField(
+        max_digits=14, decimal_places=2
+    )
+    advance_collected = serializers.DecimalField(
+        max_digits=14, decimal_places=2
+    )
+    balance_collected = serializers.DecimalField(
+        max_digits=14, decimal_places=2
+    )
+
+    
+    
+    
+    subscription_revenue = serializers.DictField(
+        child=serializers.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+    )
+)
+    failed_payment_count = serializers.IntegerField()
+    
+    photographers_awaiting_verification = serializers.IntegerField()
+
 
 
 class AdminFeedbackSerializer(serializers.ModelSerializer):
