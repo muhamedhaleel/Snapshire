@@ -935,3 +935,43 @@ class AdminVerificationWalletTransactionSerializer(
             "created_at",
 
         ]
+
+
+
+class MonthlyRevenueSerializer(serializers.Serializer):
+    month = serializers.CharField()
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    advance_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    balance_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+
+
+class AdminRevenueReportsSerializer(serializers.Serializer):
+    start_date = serializers.DateField(allow_null=True)
+    end_date = serializers.DateField(allow_null=True)
+
+    # Booking payment revenue
+    total_collected = serializers.DecimalField(max_digits=14, decimal_places=2)
+    advance_collected = serializers.DecimalField(max_digits=14, decimal_places=2)
+    balance_collected = serializers.DecimalField(max_digits=14, decimal_places=2)
+
+    paid_payment_count = serializers.IntegerField()
+    failed_payment_count = serializers.IntegerField()
+    pending_payment_count = serializers.IntegerField()
+
+    monthly_revenue = MonthlyRevenueSerializer(many=True)
+
+    # Subscription revenue
+    gold_subscription_revenue = serializers.DecimalField(
+        max_digits=14, decimal_places=2
+    )
+    platinum_subscription_revenue = serializers.DecimalField(
+        max_digits=14, decimal_places=2
+    )
+    total_subscription_revenue = serializers.DecimalField(
+        max_digits=14, decimal_places=2
+    )
+
+    # Booking + subscription collections
+    overall_collected = serializers.DecimalField(
+        max_digits=14, decimal_places=2
+    )

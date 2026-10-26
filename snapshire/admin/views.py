@@ -7,9 +7,9 @@ from rest_framework.parsers import FormParser
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
-
+from .serializers import AdminRevenueReportsSerializer
 from drf_yasg.utils import swagger_auto_schema
-
+from django.db.models import Sum, Count, Q, Case, When, F, DecimalField, Value
 from user.models import UserProfile,Booking,Feedback,Payment,WalletTransaction,RescheduleRequest
 from photographer.models import PhotographerProfile,VerificationPayment
 from .serializers import PendingPhotographerSerializer,AdminDashboardSerializer,AdminPhotographerFeedbackSerializer
@@ -17,6 +17,8 @@ from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination
 from drf_yasg import openapi
 from .models import PlatformFee,VerificationPlan
+from datetime import datetime
+from django.db.models.functions import TruncMonth
 from .serializers import (
     AdminLoginSerializer,
     UserListSerializer,
@@ -1478,6 +1480,205 @@ def photographer_feedback_for_bookings(request):
             "page_size": 10,
             "next": paginator.get_next_link(),
             "previous": paginator.get_previous_link(),
+            "data": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+ZERO = Decimal("0.00")
+
+
+@swagger_auto_schema(
+    method="get",
+    manual_parameters=[
+        openapi.Parameter(
+            "start_date",
+            openapi.IN_QUERY,
+            description="Start date in YYYY-MM-DD format",
+            type=openapi.TYPE_STRING,
+            format="date",
+            required=False,
+        ),
+        openapi.Parameter(
+            "end_date",
+            openapi.IN_QUERY,
+            description="End date in YYYY-MM-DD format",
+            type=openapi.TYPE_STRING,
+            format="date",
+            required=False,
+        ),
+    ],
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_revenue_reports(request):
+    # 1. Validate date parameters
+    try:
+        start_date = (
+            datetime.strptime(
+                request.query_params["start_date"], "%Y-%m-%d"
+            ).date()
+            if request.query_params.get("start_date")
+            else None
+        )
+
+        end_date = (
+            datetime.strptime(
+                request.query_params["end_date"], "%Y-%m-%d"
+            ).date()
+            if request.query_params.get("end_date")
+            else None
+        )
+
+    except ValueError:
+        return Response(
+            {
+                "success": False,
+                "message": "Invalid date. Use YYYY-MM-DD format.",
+                "data": None,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if start_date and end_date and start_date > end_date:
+        return Response(
+            {
+                "success": False,
+                "message": "start_date cannot be later than end_date.",
+                "data": None,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # 2. Filter booking payments
+    payments = Payment.objects.all()
+
+    if start_date:
+        payments = payments.filter(created_at__date__gte=start_date)
+
+    if end_date:
+        payments = payments.filter(created_at__date__lte=end_date)
+
+    # 3. Count booking payments by status
+    paid_payment_count = payments.filter(status="paid").count()
+    failed_payment_count = payments.filter(status="failed").count()
+    pending_payment_count = payments.filter(status="created").count()
+
+    # Only paid booking payments count as collected
+    paid_payments = payments.filter(status="paid")
+
+    # 4. Calculate booking revenue totals
+    booking_totals = paid_payments.aggregate(
+        total=Sum("amount"),
+        advance=Sum(
+            "amount",
+            filter=Q(payment_type="advance"),
+        ),
+        balance=Sum(
+            "amount",
+            filter=Q(payment_type="balance"),
+        ),
+    )
+
+    total_collected = booking_totals["total"] or ZERO
+    advance_collected = booking_totals["advance"] or ZERO
+    balance_collected = booking_totals["balance"] or ZERO
+
+    # 5. Calculate monthly booking revenue
+    # Group first by month and payment type, then combine the rows.
+    monthly_rows = (
+        paid_payments
+        .annotate(month_date=TruncMonth("created_at"))
+        .values("month_date", "payment_type")
+        .annotate(payment_total=Sum("amount"))
+        .order_by("month_date")
+    )
+
+    monthly_data = {}
+
+    for row in monthly_rows:
+        month_date = row["month_date"]
+        month_key = month_date.strftime("%b %Y")
+
+        if month_key not in monthly_data:
+            monthly_data[month_key] = {
+                "month": month_key,
+                "amount": ZERO,
+                "advance_amount": ZERO,
+                "balance_amount": ZERO,
+            }
+
+        payment_amount = row["payment_total"] or ZERO
+
+        monthly_data[month_key]["amount"] += payment_amount
+
+        if row["payment_type"] == "advance":
+            monthly_data[month_key]["advance_amount"] += payment_amount
+        elif row["payment_type"] == "balance":
+            monthly_data[month_key]["balance_amount"] += payment_amount
+
+    monthly_revenue = list(monthly_data.values())
+
+    # 6. Filter subscription payments by date
+    subscription_payments = VerificationPayment.objects.filter(
+        status="paid"
+    )
+
+    if start_date:
+        subscription_payments = subscription_payments.filter(
+            created_at__date__gte=start_date
+        )
+
+    if end_date:
+        subscription_payments = subscription_payments.filter(
+            created_at__date__lte=end_date
+        )
+
+    # 7. Calculate Gold and Platinum subscription revenue
+    subscription_totals = subscription_payments.aggregate(
+        gold=Sum("amount", filter=Q(plan_mode="gold")),
+        platinum=Sum("amount", filter=Q(plan_mode="platinum")),
+    )
+
+    gold_subscription_revenue = subscription_totals["gold"] or ZERO
+    platinum_subscription_revenue = subscription_totals["platinum"] or ZERO
+
+    total_subscription_revenue = (
+        gold_subscription_revenue + platinum_subscription_revenue
+    )
+
+    # 8. Calculate overall collections
+    overall_collected = total_collected + total_subscription_revenue
+
+    # 9. Prepare response data
+    data = {
+        "start_date": start_date,
+        "end_date": end_date,
+
+        # Booking revenue
+        "total_collected": total_collected,
+        "advance_collected": advance_collected,
+        "balance_collected": balance_collected,
+        "paid_payment_count": paid_payment_count,
+        "failed_payment_count": failed_payment_count,
+        "pending_payment_count": pending_payment_count,
+        "monthly_revenue": monthly_revenue,
+
+        # Subscription revenue
+        "gold_subscription_revenue": gold_subscription_revenue,
+        "platinum_subscription_revenue": platinum_subscription_revenue,
+        "total_subscription_revenue": total_subscription_revenue,
+
+        # Combined collections
+        "overall_collected": overall_collected,
+    }
+
+    serializer = AdminRevenueReportsSerializer(data)
+
+    return Response(
+        {
+            "success": True,
+            "message": "Revenue reports retrieved successfully.",
             "data": serializer.data,
         },
         status=status.HTTP_200_OK,

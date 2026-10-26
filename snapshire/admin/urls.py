@@ -142,6 +142,12 @@ urlpatterns = [
     name="photographer-feedback-for-bookings"
 ),
 
+    path(
+        "reports/revenue/",
+        views.admin_revenue_reports,
+        name="admin-revenue-reports",
+    ),
+
 
 
 
