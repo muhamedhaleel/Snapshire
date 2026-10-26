@@ -42,3 +42,29 @@ class VerificationPlan(models.Model):
 
     def __str__(self):
         return f"{self.get_plan_name_display()} - {self.verification_charge}"
+
+
+
+class ActivityLog(models.Model):
+    ACTION_CHOICES = [
+        ("user_blocked", "User Blocked"),
+        ("user_unlocked", "User Unlocked"),
+        ("photographer_blocked", "Photographer Blocked"),
+        ("photographer_unlocked", "Photographer Unlocked"),
+        (
+            "photographer_verification_approved",
+            "Photographer Verification Approved",
+        ),
+    ]
+
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    description = models.TextField()
+    target_type = models.CharField(max_length=20)
+    target_id = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.action} - {self.target_type} {self.target_id}"

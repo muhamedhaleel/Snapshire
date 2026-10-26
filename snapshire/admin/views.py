@@ -18,6 +18,10 @@ from rest_framework.pagination import PageNumberPagination
 from drf_yasg import openapi
 from .models import PlatformFee,VerificationPlan
 from datetime import datetime
+from django.utils import timezone
+from .models import ActivityLog
+from .serializers import ActivityLogSerializer
+
 from django.db.models.functions import TruncMonth
 from .serializers import (
     AdminLoginSerializer,
@@ -31,8 +35,9 @@ from .serializers import (
     AdminVerificationWalletTransactionSerializer,
     AdminRescheduleRequestSerializer
 )
-from .serializers import VerificationPlanSerializer
+from .serializers import VerificationPlanSerializer,AdminPhotographerReportsSerializer,PhotographerPerformanceSerializer,UserReportItemSerializer
 from photographer.models import VerificationPayment
+
 
 
 # ===========================
@@ -1683,3 +1688,307 @@ def admin_revenue_reports(request):
         },
         status=status.HTTP_200_OK,
     )
+
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: AdminPhotographerReportsSerializer},
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_photographer_reports(request):
+
+    # 1. Photographer overview
+    photographers = PhotographerProfile.objects.all()
+
+    total_photographers = photographers.count()
+
+    verified_photographers = photographers.filter(
+        is_verified=True
+    ).count()
+
+    unverified_photographers = photographers.filter(
+        is_verified=False
+    ).count()
+
+    # 2. Gold and Platinum membership counts
+    gold_photographers = photographers.filter(
+        plan_mode="gold"
+    ).count()
+
+    platinum_photographers = photographers.filter(
+        plan_mode="platinum"
+    ).count()
+
+    # 3. Overall booking performance
+    total_bookings = Booking.objects.count()
+
+    completed_bookings = Booking.objects.filter(
+        status="completed"
+    ).count()
+
+    cancelled_bookings = Booking.objects.filter(
+        status="cancelled"
+    ).count()
+
+    # 4. Performance for each photographer
+    photographer_performance = (
+        photographers
+        .annotate(
+            total_bookings=Count("bookings", distinct=True),
+            completed_bookings=Count(
+                "bookings",
+                filter=Q(bookings__status="completed"),
+                distinct=True,
+            ),
+            cancelled_bookings=Count(
+                "bookings",
+                filter=Q(bookings__status="cancelled"),
+                distinct=True,
+            ),
+        )
+        .order_by("-total_bookings", "id")
+    )
+
+    performance_data = [
+        {
+            "photographer_id": photographer.id,
+            "username": photographer.user.username,
+            "is_verified": photographer.is_verified,
+            "plan_mode": photographer.plan_mode,
+            "total_bookings": photographer.total_bookings,
+            "completed_bookings": photographer.completed_bookings,
+            "cancelled_bookings": photographer.cancelled_bookings,
+        }
+        for photographer in photographer_performance
+    ]
+
+    # 5. Prepare response
+    data = {
+        "total_photographers": total_photographers,
+        "verified_photographers": verified_photographers,
+        "unverified_photographers": unverified_photographers,
+        "gold_photographers": gold_photographers,
+        "platinum_photographers": platinum_photographers,
+        "total_bookings": total_bookings,
+        "completed_bookings": completed_bookings,
+        "cancelled_bookings": cancelled_bookings,
+        "photographer_performance": performance_data,
+    }
+
+    serializer = AdminPhotographerReportsSerializer(data)
+
+    return Response(
+        {
+            "success": True,
+            "message": "Photographer reports retrieved successfully.",
+            "data": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+
+    )
+
+
+class PhotographerReportsPagination(PageNumberPagination):
+    page_size = 5
+    page_query_param = "page"
+
+
+@swagger_auto_schema(
+    method="get",
+    manual_parameters=[
+        openapi.Parameter(
+            "page",
+            openapi.IN_QUERY,
+            description="Enter the page number (e.g. 1, 2, 3)",
+            type=openapi.TYPE_INTEGER,
+            required=False,
+        )
+    ],
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_photographer_reports(request):
+    photographers = PhotographerProfile.objects.all()
+
+    # Photographer performance and booking counts
+    photographer_performance = (
+        photographers
+        .annotate(
+            total_bookings=Count("bookings", distinct=True),
+            completed_bookings=Count(
+                "bookings",
+                filter=Q(bookings__status="completed"),
+                distinct=True,
+            ),
+            cancelled_bookings=Count(
+                "bookings",
+                filter=Q(bookings__status="cancelled"),
+                distinct=True,
+            ),
+        )
+        .order_by("-total_bookings", "id")
+    )
+
+    # Prepare photographer data
+    performance_data = [
+        {
+            "photographer_id": photographer.id,
+            "username": photographer.user.username,
+            "is_verified": photographer.is_verified,
+            "plan_mode": photographer.plan_mode,
+            "total_bookings": photographer.total_bookings,
+            "completed_bookings": photographer.completed_bookings,
+            "cancelled_bookings": photographer.cancelled_bookings,
+        }
+        for photographer in photographer_performance
+    ]
+
+    # Apply pagination
+    paginator = PhotographerReportsPagination()
+    paginated_data = paginator.paginate_queryset(
+        performance_data, request, view=None
+    )
+
+    # Serialize the current page
+    serializer = PhotographerPerformanceSerializer(
+        paginated_data, many=True
+    )
+
+    # Return requested response format
+    return Response(
+        {
+            "success": True,
+            "count": paginator.page.paginator.count,
+            "total_pages": paginator.page.paginator.num_pages,
+            "current_page": paginator.page.number,
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
+            "data": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+
+class UserReportsPagination(PageNumberPagination):
+    page_size = 10
+    page_query_param = "page"
+
+
+@swagger_auto_schema(
+    method="get",
+    manual_parameters=[
+        openapi.Parameter(
+            "page",
+            openapi.IN_QUERY,
+            description="Enter page number (1, 2, 3, ...)",
+            type=openapi.TYPE_INTEGER,
+            required=False,
+        )
+    ],
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_user_reports(request):
+    users = (
+        User.objects
+        .annotate(total_bookings=Count("bookings", distinct=True))
+        .order_by("-date_joined", "-id")
+    )
+
+    # Overall user statistics
+    total_users = users.count()
+    active_users = users.filter(is_active=True).count()
+    inactive_users = users.filter(is_active=False).count()
+
+    today = timezone.localdate()
+    first_day_of_month = today.replace(day=1)
+
+    new_users_this_month = users.filter(
+        date_joined__date__gte=first_day_of_month,
+        date_joined__date__lte=today,
+    ).count()
+
+    # Pagination
+    paginator = UserReportsPagination()
+    paginated_users = paginator.paginate_queryset(
+        users, request, view=None
+    )
+
+    user_data = [
+        {
+            "user_id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "is_active": user.is_active,
+            "date_joined": user.date_joined,
+            "total_bookings": user.total_bookings,
+        }
+        for user in paginated_users
+    ]
+
+    serializer = UserReportItemSerializer(user_data, many=True)
+
+    return Response(
+        {
+            "success": True,
+            "count": paginator.page.paginator.count,
+            "total_pages": paginator.page.paginator.num_pages,
+            "current_page": paginator.page.number,
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
+            "statistics": {
+                "total_users": total_users,
+                "active_users": active_users,
+                "inactive_users": inactive_users,
+                "new_users_this_month": new_users_this_month,
+            },
+            "data": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+class ActivityLogPagination(PageNumberPagination):
+    page_size = 10
+    page_query_param = "page"
+
+
+@swagger_auto_schema(
+    method="get",
+    manual_parameters=[
+        openapi.Parameter(
+            "page",
+            openapi.IN_QUERY,
+            description="Enter page number (1, 2, 3, ...)",
+            type=openapi.TYPE_INTEGER,
+            required=False,
+        )
+    ],
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_activity_logs(request):
+    logs = ActivityLog.objects.all().order_by("-created_at", "-id")
+
+    paginator = ActivityLogPagination()
+    paginated_logs = paginator.paginate_queryset(
+        logs, request, view=None
+    )
+
+    serializer = ActivityLogSerializer(paginated_logs, many=True)
+
+    return Response(
+        {
+            "success": True,
+            "count": paginator.page.paginator.count,
+            "total_pages": paginator.page.paginator.num_pages,
+            "current_page": paginator.page.number,
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
+            "data": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+

@@ -7,7 +7,7 @@ from photographer.models import PhotographerProfile,PhotographerWalletTransactio
 from user.models import Booking,Feedback,Payment,WalletTransaction,RescheduleRequest
 from .models import PlatformFee,VerificationPlan
 from decimal import Decimal
-
+from .models import ActivityLog
 class AdminLoginSerializer(serializers.Serializer):
 
     username = serializers.CharField()
@@ -975,3 +975,68 @@ class AdminRevenueReportsSerializer(serializers.Serializer):
     overall_collected = serializers.DecimalField(
         max_digits=14, decimal_places=2
     )
+
+
+
+
+
+
+class PhotographerPerformanceSerializer(serializers.Serializer):
+    photographer_id = serializers.IntegerField()
+    username = serializers.CharField()
+    is_verified = serializers.BooleanField()
+    plan_mode = serializers.CharField()
+    total_bookings = serializers.IntegerField()
+    completed_bookings = serializers.IntegerField()
+    cancelled_bookings = serializers.IntegerField()
+
+
+class AdminPhotographerReportsSerializer(serializers.Serializer):
+    total_photographers = serializers.IntegerField()
+    verified_photographers = serializers.IntegerField()
+    unverified_photographers = serializers.IntegerField()
+
+    gold_photographers = serializers.IntegerField()
+    platinum_photographers = serializers.IntegerField()
+
+    total_bookings = serializers.IntegerField()
+    completed_bookings = serializers.IntegerField()
+    cancelled_bookings = serializers.IntegerField()
+
+    photographer_performance = PhotographerPerformanceSerializer(many=True)
+
+
+
+
+class UserReportItemSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+    username = serializers.CharField()
+    email = serializers.EmailField()
+    is_active = serializers.BooleanField()
+    date_joined = serializers.DateTimeField()
+    total_bookings = serializers.IntegerField()
+
+
+class AdminUserReportsSerializer(serializers.Serializer):
+    total_users = serializers.IntegerField()
+    active_users = serializers.IntegerField()
+    inactive_users = serializers.IntegerField()
+    new_users_this_month = serializers.IntegerField()
+    users = UserReportItemSerializer(many=True)
+
+
+
+
+class ActivityLogSerializer(serializers.ModelSerializer):
+    log_id = serializers.IntegerField(source="id", read_only=True)
+
+    class Meta:
+        model = ActivityLog
+        fields = [
+            "log_id",
+            "action",
+            "description",
+            "target_type",
+            "target_id",
+            "created_at",
+        ]

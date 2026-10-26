@@ -146,6 +146,28 @@ urlpatterns = [
         "reports/revenue/",
         views.admin_revenue_reports,
         name="admin-revenue-reports",
+),
+
+
+    path(
+        "reports/photographers/",
+        views.admin_photographer_reports,
+        name="admin-photographer-reports",
+),
+
+
+
+    path(
+        "reports/users/",
+        views.admin_user_reports,
+        name="admin-user-reports",
+    ),
+
+
+    path(
+        "activity-logs/",
+        views.admin_activity_logs,
+        name="admin-activity-logs",
     ),
 
 
