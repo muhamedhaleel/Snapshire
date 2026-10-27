@@ -1,0 +1,208 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SnapsHire WebSocket Tester</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 30px auto;
+            padding: 20px;
+            background: #f4f7f5;
+            color: #222;
+        }
+
+        h1 {
+            color: #176b4d;
+        }
+
+        input, button {
+            box-sizing: border-box;
+            padding: 10px;
+            margin: 5px 0;
+            font-size: 15px;
+        }
+
+        input {
+            width: 100%;
+        }
+
+        button {
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background: #176b4d;
+            color: white;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #messages {
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 12px;
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+
+        #status {
+            font-weight: bold;
+        }
+
+        .warning {
+            color: #8a4b00;
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>SnapsHire Chat Tester</h1>
+
+    <label for="bookingId">Booking ID</label>
+    <input id="bookingId" type="number" value="25">
+
+    <label for="token">JWT Access Token</label>
+    <input id="token" type="password"
+           placeholder="Paste your access token here">
+
+    <p class="warning">
+        Keep your token private. This page does not intentionally save it.
+    </p>
+
+    <button id="connectBtn" onclick="connectChat()">Connect</button>
+    <button id="disconnectBtn" onclick="disconnectChat()" disabled>
+        Disconnect
+    </button>
+
+    <p>Status: <span id="status">Disconnected</span></p>
+
+    <h3>Chat messages</h3>
+    <div id="messages"></div>
+
+    <label for="messageInput">Your message</label>
+    <input id="messageInput" type="text"
+           maxlength="2000"
+           placeholder="Type a message..."
+           disabled>
+
+    <button id="sendBtn" onclick="sendMessage()" disabled>
+        Send Message
+    </button>
+
+    <script>
+        let socket = null;
+
+        const statusBox = document.getElementById("status");
+        const messagesBox = document.getElementById("messages");
+        const messageInput = document.getElementById("messageInput");
+        const sendBtn = document.getElementById("sendBtn");
+        const connectBtn = document.getElementById("connectBtn");
+        const disconnectBtn = document.getElementById("disconnectBtn");
+
+        function showMessage(data) {
+            messagesBox.textContent +=
+                JSON.stringify(data, null, 2) + "\n\n";
+            messagesBox.scrollTop = messagesBox.scrollHeight;
+        }
+
+        function connectChat() {
+            if (socket && (
+                socket.readyState === WebSocket.OPEN ||
+                socket.readyState === WebSocket.CONNECTING
+            )) {
+                return;
+            }
+
+            const bookingId =
+                document.getElementById("bookingId").value.trim();
+
+            const token =
+                document.getElementById("token").value.trim();
+
+            if (!bookingId || !token) {
+                alert("Enter both the booking ID and access token.");
+                return;
+            }
+
+            const url =
+                "ws://127.0.0.1:8000/ws/bookings/" +
+                encodeURIComponent(bookingId) +
+                "/chat/?token=" + encodeURIComponent(token);
+
+            statusBox.textContent = "Connecting...";
+            socket = new WebSocket(url);
+
+            socket.onopen = function () {
+                statusBox.textContent = "Connected";
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+            };
+
+            socket.onmessage = function (event) {
+                try {
+                    showMessage(JSON.parse(event.data));
+                } catch {
+                    showMessage({ raw: event.data });
+                }
+            };
+
+            socket.onerror = function () {
+                statusBox.textContent =
+                    "Connection error - check the server and URL";
+            };
+
+            socket.onclose = function (event) {
+                statusBox.textContent =
+                    "Disconnected (code " + event.code + ")";
+                messageInput.disabled = true;
+                sendBtn.disabled = true;
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                socket = null;
+            };
+        }
+
+        function sendMessage() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                alert("Connect to the chat first.");
+                return;
+            }
+
+            const message = messageInput.value.trim();
+
+            if (!message) {
+                alert("Enter a message.");
+                return;
+            }
+
+            socket.send(JSON.stringify({ message: message }));
+            messageInput.value = "";
+        }
+
+        function disconnectChat() {
+            if (socket) {
+                socket.close();
+            }
+        }
+
+        messageInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

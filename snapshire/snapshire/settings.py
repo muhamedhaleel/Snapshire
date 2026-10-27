@@ -38,10 +38,22 @@ ALLOWED_HOSTS = []
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+ASGI_APPLICATION = "snapshire.asgi.application"
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
+
 
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -51,15 +63,19 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'drf_yasg',
+    "channels",
+    "chat.apps.ChatConfig",
     'user',
     'photographer',
     'admin.apps.AdminConfig',
+
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
     "django.contrib.sites",
     
+
 ]
 SITE_ID = 1
 
@@ -228,3 +244,4 @@ SOCIALACCOUNT_PROVIDERS = {
 }
 
 GOOGLE_CLIENT_ID="479406155602-qp28tn5sf3dl8vfa6nfccnpf966sum1d.apps.googleusercontent.com"
+

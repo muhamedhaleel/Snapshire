@@ -58,4 +58,6 @@ urlpatterns = [
     ),
 
     path("accounts/",include("allauth.urls")),
+
+    path("api/chat/", include("chat.urls")),
 ]
