@@ -21,7 +21,8 @@ from datetime import datetime
 from django.utils import timezone
 from .models import ActivityLog
 from .serializers import ActivityLogSerializer
-
+from .models import Announcement
+from .serializers import AnnouncementSerializer
 from django.db.models.functions import TruncMonth
 from .serializers import (
     AdminLoginSerializer,
@@ -1992,3 +1993,65 @@ def admin_activity_logs(request):
         status=status.HTTP_200_OK,
     )
 
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=AnnouncementSerializer,
+)
+@api_view(["POST"])
+@parser_classes([FormParser])
+@permission_classes([IsAdminUser])
+def admin_send_announcement(request):
+    serializer = AnnouncementSerializer(data=request.data)
+
+    if serializer.is_valid():
+        announcement = serializer.save(is_published=True)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Announcement sent successfully.",
+                "data": AnnouncementSerializer(announcement).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    return Response(
+        {
+            "success": False,
+            "message": "Invalid announcement details.",
+            "errors": serializer.errors,
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+# List announcements
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_announcements(request):
+    announcements = Announcement.objects.filter(
+        is_published=True
+    ).order_by("-created_at")
+
+    # Optional audience filtering
+    user_type = request.query_params.get("audience")
+
+    if user_type in ["customers", "photographers"]:
+        announcements = announcements.filter(
+            audience__in=["all", user_type]
+        )
+    else:
+        announcements = announcements.filter(audience="all")
+
+    serializer = AnnouncementSerializer(announcements, many=True)
+
+    return Response(
+        {
+            "success": True,
+            "count": announcements.count(),
+            "data": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )

@@ -25,6 +25,7 @@ from drf_yasg import openapi
 from photographer.models import PhotographerProfile,WeeklyAvailability,AvailabilityException,PhotographerCharge
 from datetime import date, timedelta
 from datetime import datetime
+from admin.models import Announcement
 import random
 from django.core.mail import send_mail
 from django.utils import timezone
@@ -1013,20 +1014,60 @@ def user_booking_status(request):
     )
 
 
+# @api_view(["GET"])
+# @permission_classes([IsAuthenticated])
+# def user_notifications(request):
+
+#     notifications = Notification.objects.filter(
+#         user=request.user
+#     )
+
+#     serializer = NotificationSerializer(
+#         notifications,
+#         many=True
+#     )
+#     return Response(serializer.data)
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def user_notifications(request):
-
     notifications = Notification.objects.filter(
         user=request.user
-    )
+    ).order_by("-created_at")
 
-    serializer = NotificationSerializer(
+    notification_data = NotificationSerializer(
         notifications,
-        many=True
-    )
-    return Response(serializer.data)
+        many=True,
+    ).data
 
+    # Determine the user's audience
+    if hasattr(request.user, "photographer"):
+        audience = "photographers"
+    else:
+        audience = "customers"
+
+    announcements = Announcement.objects.filter(
+        is_published=True,
+        audience__in=["all", audience],
+    ).order_by("-created_at")
+
+    # Return only the announcement message
+    announcement_data = [
+        {"title": announcement.title,
+        "message": announcement.message,
+        "created_at": announcement.created_at}
+        for announcement in announcements
+    ]
+
+    return Response(
+        {
+            "success": True,
+            "notifications": notification_data,
+            "announcements": announcement_data,
+        },
+        status=status.HTTP_200_OK,
+    )
 
 @swagger_auto_schema(
     method="get",

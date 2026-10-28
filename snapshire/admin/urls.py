@@ -170,6 +170,17 @@ urlpatterns = [
         name="admin-activity-logs",
     ),
 
+    path(
+        "announcements/send/",
+        views.admin_send_announcement,
+        name="admin-send-announcement",
+    ),
+    path(
+        "announcements/",
+        views.list_announcements,
+        name="list-announcements",
+    ),
+
 
 
 

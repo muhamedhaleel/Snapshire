@@ -7,7 +7,7 @@ from photographer.models import PhotographerProfile,PhotographerWalletTransactio
 from user.models import Booking,Feedback,Payment,WalletTransaction,RescheduleRequest
 from .models import PlatformFee,VerificationPlan
 from decimal import Decimal
-from .models import ActivityLog
+from .models import ActivityLog,Announcement
 class AdminLoginSerializer(serializers.Serializer):
 
     username = serializers.CharField()
@@ -1040,3 +1040,18 @@ class ActivityLogSerializer(serializers.ModelSerializer):
             "target_id",
             "created_at",
         ]
+
+
+
+
+class AnnouncementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Announcement
+        fields = [
+            "id",
+            "title",
+            "message",
+            "audience",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]

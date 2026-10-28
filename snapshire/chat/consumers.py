@@ -96,6 +96,8 @@ class BookingChatConsumer(AsyncWebsocketConsumer):
             "id": event["id"],
             "booking_id": event["booking_id"],
             "sender_id": event["sender_id"],
+            "sender_username": event["sender_username"],
+            "photographer_username": event["photographer_username"],
             "message": event["message"],
             "created_at": event["created_at"],
         })
@@ -165,6 +167,8 @@ class BookingChatConsumer(AsyncWebsocketConsumer):
             "id": saved.id,
             "booking_id": booking.id,
             "sender_id": saved.sender_id,
+            "sender_username": saved.sender.username,
+            "photographer_username": booking.photographer.user.username,
             "message": saved.message,
             "created_at": saved.created_at.isoformat(),
         }

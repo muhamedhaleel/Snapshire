@@ -61,7 +61,7 @@ from django.db import transaction
 from user.models import Booking, Feedback
 from django.db import IntegrityError, transaction
 
-
+from admin.models import Announcement
 import razorpay
 
 
@@ -460,11 +460,40 @@ def verification(request):
         status=status.HTTP_200_OK,
     )
 
+# @api_view(["GET"])
+# @permission_classes([IsAuthenticated])
+# def photographer_notifications(request):
+
+#     # Check photographer profile first
+#     if not hasattr(request.user, "photographer_profile"):
+#         return Response(
+#             {
+#                 "success": False,
+#                 "message": "You are not a photographer."
+#             },
+#             status=status.HTTP_403_FORBIDDEN
+#         )
+
+#     response = check_photographer_verification(request)
+#     if response:
+#         return response
+
+#     notifications = Notification.objects.filter(
+#         user=request.user
+#     ).order_by("-created_at")
+
+#     serializer = NotificationSerializer(
+#         notifications,
+#         many=True
+#     )
+
+#     return Response(serializer.data, status=status.HTTP_200_OK)
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def photographer_notifications(request):
 
-    # Check photographer profile first
+   
     if not hasattr(request.user, "photographer_profile"):
         return Response(
             {
@@ -478,16 +507,42 @@ def photographer_notifications(request):
     if response:
         return response
 
+   
     notifications = Notification.objects.filter(
         user=request.user
     ).order_by("-created_at")
 
-    serializer = NotificationSerializer(
+    notification_data = NotificationSerializer(
         notifications,
         many=True
+    ).data
+
+    # Get admin announcements for photographers
+    announcements = Announcement.objects.filter(
+        is_published=True,
+        audience__in=["all", "photographers"]
+    ).order_by("-created_at")
+
+    announcement_data = [
+        {
+            "title": announcement.title,
+            "message": announcement.message,
+            "created_at": announcement.created_at,
+        }
+        for announcement in announcements
+    ]
+
+    return Response(
+        {
+            "success": True,
+            "notifications": notification_data,
+            "announcements": announcement_data,
+        },
+        status=status.HTTP_200_OK
     )
 
-    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 
 
 @swagger_auto_schema(
