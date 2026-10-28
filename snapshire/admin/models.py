@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 
 # Create your models here.
 
@@ -68,3 +69,29 @@ class ActivityLog(models.Model):
 
     def __str__(self):
         return f"{self.action} - {self.target_type} {self.target_id}"
+
+
+class Announcement(models.Model):
+    AUDIENCE_CHOICES = [
+        ("all", "All Users"),
+        ("customers", "Customers"),
+        ("photographers", "Photographers"),
+    ]
+
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+
+    audience = models.CharField(
+        max_length=20,
+        choices=AUDIENCE_CHOICES,
+        default="all",
+    )
+
+    is_published = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title
