@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
     "django.contrib.sites",
+    "rest_framework_simplejwt.token_blacklist",
     
 
 ]

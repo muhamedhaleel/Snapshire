@@ -64,6 +64,8 @@ urlpatterns = [
     path("wallet/transactions/",views.wallet_transactions,name="wallet-transactions"),
     path("booking/reschedule/",views.request_reschedule,name="request-reschedule"),
     path("google-login/",views.GoogleLoginView.as_view(),name="google-login"),
+    path("dashboard/", views.user_dashboard, name="user-dashboard"),
+    path("logout/", views.user_logout, name="user-logout"),
     
      
 ]

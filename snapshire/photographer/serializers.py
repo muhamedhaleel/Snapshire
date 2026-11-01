@@ -578,20 +578,30 @@ class UpdateWorkStatusSerializer(serializers.Serializer):
     )
 
 
+# class PhotographerDashboardSerializer(serializers.Serializer):
+
+#     total_bookings = serializers.IntegerField()
+
+#     completed_bookings = serializers.IntegerField()
+
+#     total_earnings = serializers.DecimalField(
+#         max_digits=12,
+#         decimal_places=2
+#     )
+
+#     plan_mode = serializers.CharField()
+
 class PhotographerDashboardSerializer(serializers.Serializer):
 
-    total_bookings = serializers.IntegerField()
+    welcome_message = serializers.CharField()
 
-    completed_bookings = serializers.IntegerField()
+    booking_stats = serializers.DictField()
 
-    total_earnings = serializers.DecimalField(
-        max_digits=12,
-        decimal_places=2
-    )
+    earnings = serializers.DictField()
 
-    plan_mode = serializers.CharField()
+    profile = serializers.DictField()
 
-
+    performance = serializers.DictField()
 
 class PhotographerChargeSerializer(serializers.ModelSerializer):
 

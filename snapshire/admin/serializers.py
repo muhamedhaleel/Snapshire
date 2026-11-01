@@ -208,6 +208,7 @@ class AdminDashboardSerializer(serializers.Serializer):
     total_users = serializers.IntegerField()
     total_photographers = serializers.IntegerField()
     total_bookings = serializers.IntegerField()
+    
     total_verified_photographers = serializers.IntegerField()
     total_gold_photographers = serializers.IntegerField()
     total_platinum_photographers = serializers.IntegerField()

@@ -38,7 +38,7 @@ from drf_yasg.utils import swagger_auto_schema
 from .serializers import UpdateWorkStatusSerializer,PhotographerFeedbackSerializer,PhotographerAddedFeedbackSerializer
 
 from user.models import Booking,UserProfile
-from django.db.models import Sum
+from django.db.models import Sum,Avg,Count
 from django.db import transaction
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -1439,22 +1439,99 @@ def update_work_status(request, booking_id):
 
 
 
+# @swagger_auto_schema(
+#     method="get",
+#     responses={
+#         200: PhotographerDashboardSerializer
+#     }
+# )
+# @api_view(["GET"])
+# @permission_classes([IsAuthenticated])
+# def photographer_dashboard(request):
+
+#     # ---------------------------------------
+#     # CHECK PHOTOGRAPHER
+#     # ---------------------------------------
+
+#     if not hasattr(request.user, "photographer_profile"):
+
+#         return Response(
+#             {
+#                 "success": False,
+#                 "message": "You are not a photographer."
+#             },
+#             status=status.HTTP_403_FORBIDDEN
+#         )
+
+#     photographer = request.user.photographer_profile
+
+#     # ---------------------------------------
+#     # GET PHOTOGRAPHER BOOKINGS
+#     # ---------------------------------------
+
+#     bookings = Booking.objects.filter(
+#         photographer=photographer
+#     )
+
+#     # ---------------------------------------
+#     # TOTAL BOOKINGS
+#     # ---------------------------------------
+
+#     total_bookings = bookings.count()
+
+#     # ---------------------------------------
+#     # COMPLETED BOOKINGS
+#     # ---------------------------------------
+
+#     completed_bookings = bookings.filter(
+#         status="completed"
+#     ).count()
+
+#     # ---------------------------------------
+#     # TOTAL EARNINGS
+#     # ---------------------------------------
+
+#     total_earnings = bookings.filter(
+#         status="completed"
+#     ).aggregate(
+#         total=Sum("photographer_amount")
+#     )["total"] or 0
+
+#     # ---------------------------------------
+#     # DASHBOARD DATA
+#     # ---------------------------------------
+
+#     data = {
+#         "total_bookings": total_bookings,
+#         "completed_bookings": completed_bookings,
+#         "total_earnings": total_earnings,
+#         "plan_mode": photographer.plan_mode
+#     }
+
+#     serializer = PhotographerDashboardSerializer(data)
+
+#     return Response(
+#         {
+#             "success": True,
+#             "message": "Dashboard data retrieved successfully.",
+#             "data": serializer.data
+#         },
+#         status=status.HTTP_200_OK
+#     )
+
 @swagger_auto_schema(
     method="get",
     responses={
-        200: PhotographerDashboardSerializer
+        200: PhotographerDashboardSerializer,
+        403: "You are not a photographer."
     }
 )
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def photographer_dashboard(request):
 
-    # ---------------------------------------
     # CHECK PHOTOGRAPHER
-    # ---------------------------------------
-
     if not hasattr(request.user, "photographer_profile"):
-
         return Response(
             {
                 "success": False,
@@ -1465,47 +1542,102 @@ def photographer_dashboard(request):
 
     photographer = request.user.photographer_profile
 
-    # ---------------------------------------
     # GET PHOTOGRAPHER BOOKINGS
-    # ---------------------------------------
-
     bookings = Booking.objects.filter(
         photographer=photographer
     )
 
-    # ---------------------------------------
-    # TOTAL BOOKINGS
-    # ---------------------------------------
-
+    # BOOKING STATISTICS
     total_bookings = bookings.count()
-
-    # ---------------------------------------
-    # COMPLETED BOOKINGS
-    # ---------------------------------------
 
     completed_bookings = bookings.filter(
         status="completed"
     ).count()
 
-    # ---------------------------------------
-    # TOTAL EARNINGS
-    # ---------------------------------------
+    upcoming_bookings = bookings.filter(
+        status="confirmed",
+        date__gte=timezone.localdate()
+    ).count()
 
+    pending_requests = bookings.filter(
+        status="waiting_photographer"
+    ).count()
+
+    active_bookings = bookings.filter(
+        status__in=["work_started", "in_progress"]
+    ).count()
+
+    cancelled_bookings = bookings.filter(
+        status="cancelled"
+    ).count()
+
+    rejected_bookings = bookings.filter(
+        status="photographer_rejected"
+    ).count()
+
+    # TOTAL EARNINGS
     total_earnings = bookings.filter(
         status="completed"
     ).aggregate(
         total=Sum("photographer_amount")
     )["total"] or 0
 
-    # ---------------------------------------
-    # DASHBOARD DATA
-    # ---------------------------------------
+    # THIS MONTH EARNINGS
+    today = timezone.localdate()
 
+    this_month_earnings = bookings.filter(
+        status="completed",
+        date__year=today.year,
+        date__month=today.month
+    ).aggregate(
+        total=Sum("photographer_amount")
+    )["total"] or 0
+
+    # AVERAGE RATING FROM USER FEEDBACK
+    average_rating = Feedback.objects.filter(
+        photographer=photographer,
+        feedback_by="user",
+        booking__status="completed"
+    ).aggregate(
+        average=Avg("rating")
+    )["average"]
+
+    average_rating = (
+        round(average_rating, 1)
+        if average_rating is not None
+        else 0.0
+    )
+
+    # PROFILE DETAILS
+    is_verified = photographer.is_verified
+
+    # DASHBOARD DATA
     data = {
-        "total_bookings": total_bookings,
-        "completed_bookings": completed_bookings,
-        "total_earnings": total_earnings,
-        "plan_mode": photographer.plan_mode
+        "welcome_message": (
+            f"Welcome back, "
+            f"{request.user.username}!"
+        ),
+        "booking_stats": {
+            "total_bookings": total_bookings,
+            "completed_bookings": completed_bookings,
+            "upcoming_bookings": upcoming_bookings,
+            "cancelled_bookings": cancelled_bookings,
+            
+        },
+        "earnings": {
+            "total_earnings": total_earnings,
+            "this_month_earnings": this_month_earnings
+        },
+        "profile": {
+            "is_verified": is_verified,
+            "verification_status": (
+                "approved" if is_verified else "pending"
+            ),
+            "plan_mode": photographer.plan_mode
+        },
+        "performance": {
+            "average_rating": average_rating
+        }
     }
 
     serializer = PhotographerDashboardSerializer(data)
@@ -1518,6 +1650,7 @@ def photographer_dashboard(request):
         },
         status=status.HTTP_200_OK
     )
+
 
 
 

@@ -947,3 +947,28 @@ class RescheduleRequestSerializer(serializers.Serializer):
 
 class GoogleLoginSerializer(serializers.Serializer):
     id_token = serializers.CharField(required=True)
+
+
+
+from rest_framework import serializers
+
+
+class UserDashboardSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    welcome_message = serializers.CharField()
+
+    statistics = serializers.DictField(
+        child=serializers.IntegerField()
+    )
+
+    scheduled_booking_details = serializers.ListField(
+        child=serializers.DictField()
+    )
+
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField(
+        required=True,
+        trim_whitespace=True,
+        write_only=True
+    )

@@ -7,7 +7,10 @@ from user.models import Booking
 from .models import ChatMessage
 
 
-CHAT_ALLOWED_STATUS = "photographer_accepted"
+CHAT_ALLOWED_STATUS = ["photographer_accepted",
+                       "work_started",
+                        "in_progress",
+]
 MAX_MESSAGE_LENGTH = 2000
 
 
@@ -22,9 +25,22 @@ class BookingChatConsumer(AsyncWebsocketConsumer):
             await self.close(code=4401)
             return
 
+        # if not await self.has_chat_access():
+        #     await self.close(code=4403)
+        #     return
+
+
         if not await self.has_chat_access():
+            await self.accept()
+            await self.send_json({
+                "type": "error",
+                "code": "CHAT_NOT_AVAILABLE",
+                "message": "Chat is unavailable Because the booking has been completed or cancelled. or not accepted by the photographer. please check Booking status",
+            })
             await self.close(code=4403)
             return
+
+
 
         await self.channel_layer.group_add(
             self.room_group_name,
@@ -106,7 +122,7 @@ class BookingChatConsumer(AsyncWebsocketConsumer):
         if event["status"] != CHAT_ALLOWED_STATUS:
             await self.send_json({
                 "type": "chat_closed",
-                "message": "Chat closed because the booking is no longer accepted.",
+                "message": "Chat closed because the booking is no longer  because the booking has been completed or cancelled",
             })
             await self.close(code=4403)
 
@@ -136,7 +152,7 @@ class BookingChatConsumer(AsyncWebsocketConsumer):
 
         return (
             (is_customer or is_photographer)
-            and booking.status == CHAT_ALLOWED_STATUS
+            and booking.status in CHAT_ALLOWED_STATUS
         )
 
     @database_sync_to_async
@@ -148,7 +164,7 @@ class BookingChatConsumer(AsyncWebsocketConsumer):
             .first()
         )
 
-        if not booking or booking.status != CHAT_ALLOWED_STATUS:
+        if not booking or booking.status not in  CHAT_ALLOWED_STATUS:
             return None
 
         is_customer = booking.user_id == self.user.id

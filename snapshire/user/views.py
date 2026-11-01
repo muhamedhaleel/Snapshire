@@ -3,6 +3,8 @@ from django.contrib.auth.models import User
 from rest_framework.decorators import api_view,parser_classes,permission_classes
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework_simplejwt.exceptions import TokenError
+from django.db import DatabaseError
 from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import SignupSerializer, LoginSerializer,UpdateProfileSerializer,CreateBalancePaymentSerializer,UserWalletSerializer,WalletTransactionSerializer,CancelBookingRequestSerializer
 from .models import UserProfile
@@ -16,7 +18,7 @@ from .models import Booking,UserWallet,WalletTransaction
 from .serializers import BookingSerializer,UserBookingStatusSerializer,VerifyOTPSerializer,UserFeedbackListSerializer
 from decimal import Decimal
 from .models import Notification,RescheduleRequest
-from .serializers import NotificationSerializer,ForgotPasswordSerializer,ResetPasswordSerializer,BookingPaymentDetailsSerializer,CreateFeedbackSerializer,GoogleLoginSerializer
+from .serializers import NotificationSerializer,ForgotPasswordSerializer,ResetPasswordSerializer,BookingPaymentDetailsSerializer,CreateFeedbackSerializer,GoogleLoginSerializer,LogoutSerializer
 from django.db.models import Q
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -286,7 +288,7 @@ def profile(request):
     responses={200: PhotographerViewSerializer(many=True)}
 )
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated,IsNormalUser])
 def view_photographers(request):
 
     photographers = PhotographerProfile.objects.filter(
@@ -315,7 +317,7 @@ def view_photographers(request):
     responses={200: PhotographerDetailSerializer}
 )
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated,IsNormalUser])
 def photographer_detail(request, id):
 
     try:
@@ -344,7 +346,7 @@ def photographer_detail(request, id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated,IsNormalUser])
 def photographer_availability(request, photographer_id):
 
     try:
@@ -987,7 +989,7 @@ def create_booking(request):
     responses={200: UserBookingStatusSerializer(many=True)}
 )
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated,IsNormalUser])
 def user_booking_status(request):
 
     bookings = Booking.objects.filter(
@@ -1030,7 +1032,7 @@ def user_booking_status(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated,IsNormalUser])
 def user_notifications(request):
     notifications = Notification.objects.filter(
         user=request.user
@@ -2684,7 +2686,7 @@ def create_balance_payment(request):
     request_body=CreateFeedbackSerializer
 )
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated,IsNormalUser])
 @parser_classes([FormParser, MultiPartParser])
 def create_photographer_feedback(request, booking_id):
 
@@ -3463,3 +3465,132 @@ class GoogleLoginView(APIView):
                 "last_name": profile.last_name
             }
         }, status=status.HTTP_200_OK)
+
+
+@swagger_auto_schema(method="get")
+@api_view(["GET"])
+@permission_classes([IsAuthenticated,IsNormalUser])
+def user_dashboard(request):
+    user = request.user
+    today = timezone.localdate()
+
+    bookings = Booking.objects.filter(user=user)
+
+    total_bookings = bookings.count()
+
+    completed_bookings = bookings.filter(
+        status="completed"
+    ).count()
+
+    cancelled_bookings = bookings.filter(
+        status="cancelled"
+    ).count()
+
+    scheduled_bookings = bookings.filter(
+        status__in=["photographer_accepted", "confirmed"],
+        date__gte=today,
+    ).select_related(
+        "photographer__user"
+    ).order_by("date", "shoot_time")
+
+    scheduled_booking_details = [
+        {
+            "booking_id": booking.id,
+            "date": booking.date,
+            "session": booking.session,
+            "shoot_time": booking.shoot_time,
+            "location": booking.location,
+            "hours": booking.hours,
+            "requirements": booking.requirements,
+            "status": booking.status,
+            "photographer": booking.photographer.user.username,
+        }
+        for booking in scheduled_bookings
+    ]
+
+    return Response(
+        {
+            "success": True,
+            "welcome_message": f"Welcome back, {user.username}!",
+            "statistics": {
+                "total_bookings": total_bookings,
+                "completed_bookings": completed_bookings,
+                "scheduled_bookings": scheduled_bookings.count(),
+                "cancelled_bookings": cancelled_bookings,
+            },
+            "scheduled_booking_details": scheduled_booking_details,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=LogoutSerializer,
+    responses={
+        200: "Logged out successfully.",
+        400: "Invalid or missing refresh token.",
+        401: "Authentication required.",
+    },
+)
+@api_view(["POST"])
+@parser_classes([FormParser])
+@permission_classes([IsAuthenticated])
+def user_logout(request):
+    serializer = LogoutSerializer(data=request.data)
+
+    if not serializer.is_valid():
+        return Response(
+            {
+                "success": False,
+                "message": "Invalid request data.",
+                "errors": serializer.errors,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        refresh_token = RefreshToken(
+            serializer.validated_data["refresh"]
+        )
+
+        
+        token_user_id = refresh_token.get("user_id")
+
+        if str(token_user_id) != str(request.user.pk):
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid refresh token.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        refresh_token.blacklist()
+
+        return Response(
+            {
+                "success": True,
+                "message": "Logged out successfully.",
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    except TokenError:
+        return Response(
+            {
+                "success": False,
+                "message": "Refresh token is invalid, expired, or already revoked.",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    except DatabaseError:
+        return Response(
+            {
+                "success": False,
+                "message": "Logout could not be completed. Please try again.",
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
