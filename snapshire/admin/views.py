@@ -1,9 +1,11 @@
 from django.contrib.auth.models import User
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Count, Sum, Q
+from django.db import transaction
 from rest_framework import status
+from django.db.models import Max
 from rest_framework.decorators import api_view, parser_classes, permission_classes
-from rest_framework.parsers import FormParser
+from rest_framework.parsers import FormParser,MultiPartParser
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -21,8 +23,13 @@ from datetime import datetime
 from django.utils import timezone
 from .models import ActivityLog
 from .serializers import ActivityLogSerializer
-from .models import Announcement
+from .models import Announcement,TermsAndConditions
 from .serializers import AnnouncementSerializer
+
+from datetime import date
+from django.db.models import Count
+from django.db.models.functions import TruncMonth
+from .serializers import AdminBookingReportSerializer
 from django.db.models.functions import TruncMonth
 from .serializers import (
     AdminLoginSerializer,
@@ -34,7 +41,8 @@ from .serializers import (
     PhotographerWalletTransaction,AdminUserRefundTransactionSerializer,PremiumVerificationSerializer,
     AdminWalletTransactionSerializer,
     AdminVerificationWalletTransactionSerializer,
-    AdminRescheduleRequestSerializer
+    AdminRescheduleRequestSerializer,
+    TermsAndConditionsSerializer
 )
 from .serializers import VerificationPlanSerializer,AdminPhotographerReportsSerializer,PhotographerPerformanceSerializer,UserReportItemSerializer
 from photographer.models import VerificationPayment
@@ -274,6 +282,14 @@ def block_photographer(request, photographer_id):
     profile.user.is_active = False
     profile.user.save()
 
+     # Create activity log
+    ActivityLog.objects.create(
+        action="photographer_blocked",
+        description=f"Admin blocked photographer '{profile.user.username}'.",
+        target_type="photographer",
+        target_id=profile.id
+    )
+
     return Response(
     {
         "message": f"Photographer '{profile.user.username}' has been blocked successfully.",
@@ -306,6 +322,13 @@ def unblock_photographer(request, photographer_id):
 
     profile.user.is_active = True
     profile.user.save()
+
+    ActivityLog.objects.create(
+        action="photographer_unlocked",
+        description=f"Admin unblocked photographer '{profile.user.username}'.",
+        target_type="photographer",
+        target_id=profile.id
+    )
 
     return Response(
     {
@@ -1987,6 +2010,9 @@ def admin_photographer_reports(request):
 
 
 
+
+
+
 class UserReportsPagination(PageNumberPagination):
     page_size = 10
     page_query_param = "page"
@@ -2082,21 +2108,53 @@ class ActivityLogPagination(PageNumberPagination):
         )
     ],
 )
+# @api_view(["GET"])
+# @permission_classes([IsAdminUser])
+# def admin_activity_logs(request):
+#     logs = ActivityLog.objects.all().order_by("-created_at", "-id")
+
+#     paginator = ActivityLogPagination()
+#     paginated_logs = paginator.paginate_queryset(
+#         logs, request, view=None
+#     )
+
+#     serializer = ActivityLogSerializer(paginated_logs, many=True)
+
+#     return Response(
+#         {
+#             "success": True,
+#             "count": paginator.page.paginator.count,
+#             "total_pages": paginator.page.paginator.num_pages,
+#             "current_page": paginator.page.number,
+#             "next": paginator.get_next_link(),
+#             "previous": paginator.get_previous_link(),
+#             "data": serializer.data,
+#         },
+#         status=status.HTTP_200_OK,
+#     )
+
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def admin_activity_logs(request):
-    logs = ActivityLog.objects.all().order_by("-created_at", "-id")
+
+    logs = ActivityLog.objects.all().order_by(
+        "-created_at", "-id"
+    )
 
     paginator = ActivityLogPagination()
     paginated_logs = paginator.paginate_queryset(
         logs, request, view=None
     )
 
-    serializer = ActivityLogSerializer(paginated_logs, many=True)
+    serializer = ActivityLogSerializer(
+        paginated_logs,
+        many=True
+    )
 
     return Response(
         {
             "success": True,
+            "message": "Activity logs retrieved successfully.",
             "count": paginator.page.paginator.count,
             "total_pages": paginator.page.paginator.num_pages,
             "current_page": paginator.page.number,
@@ -2106,7 +2164,6 @@ def admin_activity_logs(request):
         },
         status=status.HTTP_200_OK,
     )
-
 
 
 @swagger_auto_schema(
@@ -2169,3 +2226,229 @@ def list_announcements(request):
         },
         status=status.HTTP_200_OK,
     )
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=TermsAndConditionsSerializer,
+    responses={201: TermsAndConditionsSerializer}
+)
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+@parser_classes([FormParser])
+def admin_add_terms(request):
+
+    serializer = TermsAndConditionsSerializer(data=request.data)
+
+    if serializer.is_valid():
+
+        audience = serializer.validated_data["audience"]
+
+        with transaction.atomic():
+
+            last_version = TermsAndConditions.objects.filter(
+                audience=audience
+            ).aggregate(Max("version"))["version__max"] or 0
+
+            TermsAndConditions.objects.filter(
+                audience=audience,
+                is_active=True
+            ).update(is_active=False)
+
+            terms = serializer.save(
+                version=last_version + 1,
+                is_active=True,
+                created_by=request.user
+            )
+
+        return Response({
+            "success": True,
+            "message": "Terms and conditions added successfully.",
+            "data": TermsAndConditionsSerializer(terms).data
+        }, status=status.HTTP_201_CREATED)
+
+    return Response({
+        "success": False,
+        "message": "Validation failed.",
+        "errors": serializer.errors
+    }, status=status.HTTP_400_BAD_REQUEST)
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: TermsAndConditionsSerializer(many=True)}
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+
+def admin_list_terms(request):
+
+    terms = TermsAndConditions.objects.all()
+
+    audience = request.query_params.get("audience")
+
+    if audience:
+        if audience not in ["user", "photographer"]:
+            return Response({
+                "success": False,
+                "message": "Invalid audience. Use user or photographer."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        terms = terms.filter(audience=audience)
+
+    serializer = TermsAndConditionsSerializer(terms, many=True)
+
+    return Response({
+        "success": True,
+        "message": "Terms and conditions retrieved successfully.",
+        "data": serializer.data
+    }, status=status.HTTP_200_OK)
+
+
+@swagger_auto_schema(
+    method="put",
+    request_body=TermsAndConditionsSerializer
+)
+@api_view(["PUT"])
+@permission_classes([IsAdminUser])
+@parser_classes([ MultiPartParser,FormParser])
+def admin_update_terms(request, terms_id):
+
+    try:
+        old_terms = TermsAndConditions.objects.get(id=terms_id)
+    except TermsAndConditions.DoesNotExist:
+        return Response({
+            "success": False,
+            "message": "Terms and conditions not found."
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = TermsAndConditionsSerializer(
+        old_terms,
+        data=request.data,
+        partial=True
+    )
+
+    if serializer.is_valid():
+
+        with transaction.atomic():
+
+            last_version = TermsAndConditions.objects.filter(
+                audience=old_terms.audience
+            ).aggregate(Max("version"))["version__max"] or 0
+
+            TermsAndConditions.objects.filter(
+                audience=old_terms.audience,
+                is_active=True
+            ).update(is_active=False)
+
+            new_terms = TermsAndConditions.objects.create(
+                audience=old_terms.audience,
+                title=serializer.validated_data.get(
+                    "title", old_terms.title
+                ),
+                content=serializer.validated_data.get(
+                    "content", old_terms.content
+                ),
+                version=last_version + 1,
+                is_active=True,
+                created_by=request.user
+            )
+
+        return Response({
+            "success": True,
+            "message": "Terms and conditions updated successfully.",
+            "data": TermsAndConditionsSerializer(new_terms).data
+        }, status=status.HTTP_200_OK)
+
+    return Response({
+        "success": False,
+        "message": "Validation failed.",
+        "errors": serializer.errors
+    }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@swagger_auto_schema(
+    method="get",
+    manual_parameters=[
+        openapi.Parameter(
+            "start_date",
+            openapi.IN_QUERY,
+            description="Start date (YYYY-MM-DD)",
+            type=openapi.TYPE_STRING,
+            format="date",
+            required=True
+        ),
+        openapi.Parameter(
+            "end_date",
+            openapi.IN_QUERY,
+            description="End date (YYYY-MM-DD)",
+            type=openapi.TYPE_STRING,
+            format="date",
+            required=True
+        ),
+    ],
+    responses={200: AdminBookingReportSerializer}
+)
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_booking_report(request):
+
+    start_date = request.query_params.get("start_date")
+    end_date = request.query_params.get("end_date")
+
+    if not start_date or not end_date:
+        return Response({
+            "success": False,
+            "message": "Start date and end date are required."
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        start_date = date.fromisoformat(start_date)
+        end_date = date.fromisoformat(end_date)
+
+    except ValueError:
+        return Response({
+            "success": False,
+            "message": "Invalid date format. Use YYYY-MM-DD."
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    if start_date > end_date:
+        return Response({
+            "success": False,
+            "message": "Start date cannot be greater than end date."
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    bookings = Booking.objects.filter(
+        date__range=(start_date, end_date)
+    )
+
+    total_bookings = bookings.count()
+
+    monthly_counts = bookings.annotate(
+        month=TruncMonth("date")
+    ).values("month").annotate(
+        booking_count=Count("id")
+    ).order_by("month")
+
+    monthly_report = [
+        {
+            "month": item["month"].strftime("%Y-%m"),
+            "booking_count": item["booking_count"]
+        }
+        for item in monthly_counts
+    ]
+
+    data = {
+        "start_date": start_date,
+        "end_date": end_date,
+        "total_bookings": total_bookings,
+        "monthly_report": monthly_report
+    }
+
+    serializer = AdminBookingReportSerializer(data)
+
+    return Response({
+        "success": True,
+        "message": "Booking report retrieved successfully.",
+        "data": serializer.data
+    }, status=status.HTTP_200_OK)

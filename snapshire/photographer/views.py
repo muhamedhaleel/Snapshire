@@ -35,8 +35,8 @@ from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from django.contrib.auth.models import User
 from drf_yasg.utils import swagger_auto_schema
-from .serializers import UpdateWorkStatusSerializer,PhotographerFeedbackSerializer,PhotographerAddedFeedbackSerializer
-
+from .serializers import UpdateWorkStatusSerializer,PhotographerFeedbackSerializer,PhotographerAddedFeedbackSerializer,PhotographerTermsSerializer
+from admin.models import TermsAndConditions
 from user.models import Booking,UserProfile
 from django.db.models import Sum,Avg,Count
 from django.db import transaction
@@ -3310,3 +3310,37 @@ def list_photographer_added_feedback(request):
         },
         status=status.HTTP_200_OK,
     )
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: PhotographerTermsSerializer}
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_photographer_terms(request):
+
+    if not hasattr(request.user, "photographer_profile"):
+        return Response({
+            "success": False,
+            "message": "You are not registered as a photographer."
+        }, status=status.HTTP_403_FORBIDDEN)
+
+    terms = TermsAndConditions.objects.filter(
+        audience="photographer",
+        is_active=True
+    ).first()
+
+    if not terms:
+        return Response({
+            "success": False,
+            "message": "Photographer terms and conditions are not available."
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = PhotographerTermsSerializer(terms)
+
+    return Response({
+        "success": True,
+        "message": "Photographer terms retrieved successfully.",
+        "data": serializer.data
+    }, status=status.HTTP_200_OK)

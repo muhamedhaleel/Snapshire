@@ -15,6 +15,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password as django_validate_password
 from rest_framework import serializers
 from .models import Booking,Payment,Feedback
+from admin.models import TermsAndConditions
 
 
 
@@ -972,3 +973,19 @@ class LogoutSerializer(serializers.Serializer):
         trim_whitespace=True,
         write_only=True
     )
+
+
+
+
+
+class UserTermsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TermsAndConditions
+        fields = [
+            "id",
+            "title",
+            "content",
+            "version",
+            "created_at",
+            "updated_at",
+        ]

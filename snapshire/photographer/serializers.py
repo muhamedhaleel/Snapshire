@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password as django_validate_password
 from rest_framework import serializers
 from rest_framework import serializers
-
+from admin.models import TermsAndConditions
 from django.contrib.auth.password_validation import validate_password
 
 
@@ -804,4 +804,17 @@ class PhotographerAddedFeedbackSerializer(serializers.ModelSerializer):
             "comment",
             "feedback_by",
             "created_at",
+        ]
+
+
+class PhotographerTermsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TermsAndConditions
+        fields = [
+            "id",
+            "title",
+            "content",
+            "version",
+            "created_at",
+            "updated_at",
         ]

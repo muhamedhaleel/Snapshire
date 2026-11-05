@@ -66,6 +66,7 @@ urlpatterns = [
     path("google-login/",views.GoogleLoginView.as_view(),name="google-login"),
     path("dashboard/", views.user_dashboard, name="user-dashboard"),
     path("logout/", views.user_logout, name="user-logout"),
+    path("terms-and-conditions/", views.get_user_terms, name="user-terms-and-conditions"),
     
      
 ]

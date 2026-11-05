@@ -145,4 +145,10 @@ urlpatterns = [
     name="list-photographer-added-feedback",
     ),
 
+    path(
+        "terms-and-conditions/",
+        views.get_photographer_terms,
+        name="photographer-terms-and-conditions"
+    ),
+
 ]

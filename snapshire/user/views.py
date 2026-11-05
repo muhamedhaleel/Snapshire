@@ -18,7 +18,7 @@ from .models import Booking,UserWallet,WalletTransaction
 from .serializers import BookingSerializer,UserBookingStatusSerializer,VerifyOTPSerializer,UserFeedbackListSerializer
 from decimal import Decimal
 from .models import Notification,RescheduleRequest
-from .serializers import NotificationSerializer,ForgotPasswordSerializer,ResetPasswordSerializer,BookingPaymentDetailsSerializer,CreateFeedbackSerializer,GoogleLoginSerializer,LogoutSerializer
+from .serializers import NotificationSerializer,ForgotPasswordSerializer,ResetPasswordSerializer,BookingPaymentDetailsSerializer,CreateFeedbackSerializer,GoogleLoginSerializer,LogoutSerializer,UserTermsSerializer
 from django.db.models import Q
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -27,7 +27,7 @@ from drf_yasg import openapi
 from photographer.models import PhotographerProfile,WeeklyAvailability,AvailabilityException,PhotographerCharge
 from datetime import date, timedelta
 from datetime import datetime
-from admin.models import Announcement
+from admin.models import Announcement,TermsAndConditions
 import random
 from django.core.mail import send_mail
 from django.utils import timezone
@@ -1031,44 +1031,119 @@ def user_booking_status(request):
 #     return Response(serializer.data)
 
 
+# @api_view(["GET"])
+# @permission_classes([IsAuthenticated,IsNormalUser])
+# def user_notifications(request):
+#     notifications = Notification.objects.filter(
+#         user=request.user
+#     ).order_by("-created_at")
+
+#     notification_data = NotificationSerializer(
+#         notifications,
+#         many=True,
+#     ).data
+
+#     # Determine the user's audience
+#     if hasattr(request.user, "photographer"):
+#         audience = "photographers"
+#     else:
+#         audience = "customers"
+
+#     announcements = Announcement.objects.filter(
+#         is_published=True,
+#         audience__in=["all", audience],
+#     ).order_by("-created_at")
+
+#     # Return only the announcement message
+#     announcement_data = [
+#         {"title": announcement.title,
+#         "message": announcement.message,
+#         "created_at": announcement.created_at}
+#         for announcement in announcements
+#     ]
+
+#     return Response(
+#         {
+#             "success": True,
+#             "notifications": notification_data,
+#             "announcements": announcement_data,
+#         },
+#         status=status.HTTP_200_OK,
+#     )
+
+
 @api_view(["GET"])
-@permission_classes([IsAuthenticated,IsNormalUser])
+@permission_classes([IsAuthenticated, IsNormalUser])
 def user_notifications(request):
+
+    # Normal notifications
     notifications = Notification.objects.filter(
         user=request.user
     ).order_by("-created_at")
 
     notification_data = NotificationSerializer(
         notifications,
-        many=True,
+        many=True
     ).data
 
-    # Determine the user's audience
-    if hasattr(request.user, "photographer"):
+    # Determine audience
+    if hasattr(request.user, "photographer_profile"):
         audience = "photographers"
     else:
         audience = "customers"
 
+    # Announcements
     announcements = Announcement.objects.filter(
         is_published=True,
         audience__in=["all", audience],
     ).order_by("-created_at")
 
-    # Return only the announcement message
     announcement_data = [
-        {"title": announcement.title,
-        "message": announcement.message,
-        "created_at": announcement.created_at}
+        {
+            "title": announcement.title,
+            "message": announcement.message,
+            "created_at": announcement.created_at
+        }
         for announcement in announcements
     ]
+
+    # Booking status notifications
+    bookings = Booking.objects.filter(
+        user=request.user
+    ).order_by("-created_at")
+
+    booking_notifications = []
+
+    for booking in bookings:
+
+        status_messages = {
+            "payment_pending": "Your booking is waiting for payment.",
+            "waiting_photographer": "Your booking is waiting for photographer approval.",
+            "photographer_accepted": "Your photographer has accepted your booking.",
+            "photographer_rejected": "Your photographer has rejected your booking.",
+            "work_started": "Your photoshoot work has started.",
+            "in_progress": "Your photoshoot is in progress.",
+            "completed": "Your photoshoot has been completed.",
+            "cancelled": "Your booking has been cancelled."
+        }
+
+        booking_notifications.append({
+            "booking_id": booking.id,
+            "status": booking.status,
+            "message": status_messages.get(
+                booking.status,
+                "Your booking status has been updated."
+            )
+        })
 
     return Response(
         {
             "success": True,
             "notifications": notification_data,
-            "announcements": announcement_data,
+            "booking_notifications": booking_notifications,
+            "announcements": announcement_data
         },
-        status=status.HTTP_200_OK,
+        status=status.HTTP_200_OK
     )
 
 @swagger_auto_schema(
@@ -3594,3 +3669,31 @@ def user_logout(request):
             },
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
+
+
+@swagger_auto_schema(
+    method="get",
+    responses={200: UserTermsSerializer}
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_user_terms(request):
+
+    terms = TermsAndConditions.objects.filter(
+        audience="user",
+        is_active=True
+    ).first()
+
+    if not terms:
+        return Response({
+            "success": False,
+            "message": "User terms and conditions are not available."
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = UserTermsSerializer(terms)
+
+    return Response({
+        "success": True,
+        "message": "User terms retrieved successfully.",
+        "data": serializer.data
+    }, status=status.HTTP_200_OK)

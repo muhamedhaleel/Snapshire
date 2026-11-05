@@ -181,6 +181,14 @@ urlpatterns = [
         name="list-announcements",
     ),
 
+    path("terms-and-conditions/add/", views.admin_add_terms, name="admin_add_terms"),
+    path("terms-and-conditions/list/", views.admin_list_terms, name="admin_list_terms"),
+    path("terms-and-conditions/update/<int:terms_id>/",views.admin_update_terms,name="admin_update_terms"),
+    path(
+        "booking-report/",
+        views.admin_booking_report,
+        name="admin_booking_report"
+    ),
 
 
 

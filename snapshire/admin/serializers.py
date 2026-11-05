@@ -7,7 +7,7 @@ from photographer.models import PhotographerProfile,PhotographerWalletTransactio
 from user.models import Booking,Feedback,Payment,WalletTransaction,RescheduleRequest
 from .models import PlatformFee,VerificationPlan
 from decimal import Decimal
-from .models import ActivityLog,Announcement
+from .models import ActivityLog,Announcement,TermsAndConditions
 class AdminLoginSerializer(serializers.Serializer):
 
     username = serializers.CharField()
@@ -1029,13 +1029,17 @@ class AdminUserReportsSerializer(serializers.Serializer):
 
 
 class ActivityLogSerializer(serializers.ModelSerializer):
-    log_id = serializers.IntegerField(source="id", read_only=True)
+    action_display = serializers.CharField(
+        source="get_action_display",
+        read_only=True
+    )
 
     class Meta:
         model = ActivityLog
         fields = [
-            "log_id",
+            "id",
             "action",
+            "action_display",
             "description",
             "target_type",
             "target_id",
@@ -1056,3 +1060,48 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]
+
+
+
+
+
+class TermsAndConditionsSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = TermsAndConditions
+        fields = [
+            "id",
+            "audience",
+            "title",
+            "content",
+            "version",
+            "is_active",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+
+        read_only_fields = [
+            "id",
+            "version",
+            "is_active",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+
+
+
+
+
+
+class MonthlyBookingSerializer(serializers.Serializer):
+    month = serializers.CharField()
+    booking_count = serializers.IntegerField()
+
+
+class AdminBookingReportSerializer(serializers.Serializer):
+    start_date = serializers.DateField()
+    end_date = serializers.DateField()
+    total_bookings = serializers.IntegerField()
+    monthly_report = MonthlyBookingSerializer(many=True)
