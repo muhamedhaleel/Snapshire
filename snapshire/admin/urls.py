@@ -89,7 +89,7 @@ urlpatterns = [
     ),
 
     path(
-        "admin/cancelled-bookings/",
+        "cancelled-bookings/",
         views.admin_cancelled_bookings,
         name="admin-cancelled-bookings"
     ),
@@ -184,10 +184,15 @@ urlpatterns = [
     path("terms-and-conditions/add/", views.admin_add_terms, name="admin_add_terms"),
     path("terms-and-conditions/list/", views.admin_list_terms, name="admin_list_terms"),
     path("terms-and-conditions/update/<int:terms_id>/",views.admin_update_terms,name="admin_update_terms"),
-    path(
-        "booking-report/",
+    path("booking-report/",
         views.admin_booking_report,
         name="admin_booking_report"
+    ),
+
+    path(
+        "platform-fee/view/",
+        views.view_platform_fee,
+        name="view_platform_fee"
     ),
 
 

@@ -883,6 +883,8 @@ class AdminPhotographerFeedbackSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 class AdminWalletTransactionSerializer(serializers.ModelSerializer):
+    transaction_id = serializers.SerializerMethodField()
+
     booking_id = serializers.IntegerField(
         source="booking.id",
         read_only=True,
@@ -906,16 +908,19 @@ class AdminWalletTransactionSerializer(serializers.ModelSerializer):
         model = Payment
         fields = [
             "id",
+            "transaction_id",
             "booking_id",
             "user_name",
             "photographer_name",
             "payment_type",
-            
             "status",
             "platform_fee",
             "created_at",
         ]
+        read_only_fields = ["transaction_id"]
 
+    def get_transaction_id(self, obj):
+        return f"TXN-{obj.id:06d}"
 
 class AdminVerificationWalletTransactionSerializer(
     serializers.ModelSerializer

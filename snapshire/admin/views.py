@@ -140,6 +140,13 @@ def block_user(request, user_id):
     profile.user.is_active = False
     profile.user.save()
 
+    ActivityLog.objects.create(
+        action="user_blocked",
+        description=f"Admin blocked user '{profile.user.username}'.",
+        target_type="user",
+        target_id=profile.id
+    )
+
     return Response(
     {
         "message": f"User '{profile.user.username}' has been blocked successfully.",
@@ -173,6 +180,13 @@ def unblock_user(request, user_id):
 
     profile.user.is_active = True
     profile.user.save()
+
+    ActivityLog.objects.create(
+        action="user_unblocked",
+        description=f"Admin unblocked user '{profile.user.username}'.",
+        target_type="user",
+        target_id=profile.id
+    )
 
     return Response(
     {
@@ -584,125 +598,35 @@ def set_platform_fee(request):
         status=status.HTTP_400_BAD_REQUEST
     )
 
+@swagger_auto_schema(method="get")
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def view_platform_fee(request):
 
-# @swagger_auto_schema(
-#     method="get",
-#     responses={200: AdminDashboardSerializer},
-# )
-# @api_view(["GET"])
-# @permission_classes([IsAdminUser])
-# def admin_dashboard(request):
+    fee = PlatformFee.objects.first()
 
-#     # 1. Existing overview metrics
-#     total_users = User.objects.count()
-#     total_photographers = PhotographerProfile.objects.count()
-#     total_bookings = Booking.objects.count()
+    if not fee:
+        return Response(
+            {
+                "success": False,
+                "message": "Platform fee not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
 
-#     total_verified_photographers = (
-#         PhotographerProfile.objects.filter(is_verified=True).count()
-#     )
+    return Response(
+        {
+            "success": True,
+            "message": "Platform fee retrieved successfully.",
+            "data": {
+                "amount": str(fee.amount),
+                "last_updated": fee.updated_at
+            }
+        },
+        status=status.HTTP_200_OK
+    )
 
-#     total_gold_photographers = (
-#         PhotographerProfile.objects.filter(plan_mode="gold").count()
-#     )
 
-#     total_platinum_photographers = (
-#         PhotographerProfile.objects.filter(plan_mode="platinum").count()
-#     )
-
-#     # 2. Booking status summary: only statuses with existing bookings
-#     booking_status = {
-#         item["status"]: item["count"]
-#         for item in Booking.objects.values("status").annotate(
-#             count=Count("id")
-#         )
-#     }
-
-#     # 3. Successful booking payments
-#     paid_payments = Payment.objects.filter(status="paid")
-
-#     payment_totals = paid_payments.aggregate(
-#         total_collected=Sum("amount"),
-#         advance_collected=Sum(
-#             "amount",
-#             filter=Q(payment_type="advance"),
-#         ),
-#         balance_collected=Sum(
-#             "amount",
-#             filter=Q(payment_type="balance"),
-#         ),
-#     )
-
-#     total_collected = (
-#         payment_totals["total_collected"] or Decimal("0.00")
-#     )
-#     advance_collected = (
-#         payment_totals["advance_collected"] or Decimal("0.00")
-#     )
-#     balance_collected = (
-#         payment_totals["balance_collected"] or Decimal("0.00")
-#     )
-
-#     failed_payment_count = Payment.objects.filter(
-#         status="failed"
-#     ).count()
-
-#     # 4. Subscription overview
-#     # Counts are available from PhotographerProfile.
-#     # Actual subscription revenue requires subscription-payment records.
-#     subscription_revenue = {
-#         "gold": Decimal("0.00"),
-#         "platinum": Decimal("0.00"),
-#         "total": Decimal("0.00"),
-#     }
-
-#     # 5. Admin action counts
-#     bookings_waiting_admin = Booking.objects.filter(
-#         status="waiting_admin"
-#     ).count()
-
-#     photographers_awaiting_verification = (
-#         PhotographerProfile.objects.filter(is_verified=False).count()
-#     )
-
-#     # 6. Response data
-#     data = {
-#         # Existing fields
-#         "total_users": total_users,
-#         "total_photographers": total_photographers,
-#         "total_bookings": total_bookings,
-#         "total_verified_photographers": total_verified_photographers,
-#         "total_gold_photographers": total_gold_photographers,
-#         "total_platinum_photographers": total_platinum_photographers,
-
-#         # Booking analytics
-#         "booking_status": booking_status,
-
-#         # Booking-payment analytics
-#         "total_collected": total_collected,
-#         "advance_collected": advance_collected,
-#         "balance_collected": balance_collected,
-#         "failed_payment_count": failed_payment_count,
-
-#         # Subscription analytics
-#         "subscription_revenue": subscription_revenue,
-
-#         # Admin actions
-#         "bookings_waiting_admin": bookings_waiting_admin,
-#         "photographers_awaiting_verification":
-#             photographers_awaiting_verification,
-#     }
-
-#     serializer = AdminDashboardSerializer(data)
-
-#     return Response(
-#         {
-#             "success": True,
-#             "message": "Admin dashboard data retrieved successfully.",
-#             "data": serializer.data,
-#         },
-#         status=status.HTTP_200_OK,
-#     )
 
 
 @swagger_auto_schema(
@@ -1628,6 +1552,109 @@ def photographer_feedback_for_bookings(request):
         status=status.HTTP_200_OK,
     )
 
+
+
+from io import BytesIO
+from django.http import HttpResponse
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+)
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+
+
+def generate_revenue_pdf(data):
+    buffer = BytesIO()
+
+    pdf = SimpleDocTemplate(
+        buffer,
+        pagesize=A4
+    )
+
+    styles = getSampleStyleSheet()
+    elements = []
+
+    elements.append(Paragraph("SnapsHire Revenue Report", styles["Title"]))
+    elements.append(Spacer(1, 20))
+
+    elements.append(Paragraph(
+        f"Start Date: {data.get('start_date') or 'All dates'}",
+        styles["Normal"]
+    ))
+    elements.append(Paragraph(
+        f"End Date: {data.get('end_date') or 'All dates'}",
+        styles["Normal"]
+    ))
+
+    elements.append(Spacer(1, 20))
+
+    summary_data = [
+        ["Revenue Details", "Amount"],
+        ["Booking Revenue", f"Rs. {data['total_collected']}"],
+        ["Advance Collected", f"Rs. {data['advance_collected']}"],
+        ["Balance Collected", f"Rs. {data['balance_collected']}"],
+        ["Gold Subscription", f"Rs. {data['gold_subscription_revenue']}"],
+        ["Platinum Subscription", f"Rs. {data['platinum_subscription_revenue']}"],
+        ["Total Subscription Revenue", f"Rs. {data['total_subscription_revenue']}"],
+        ["Overall Revenue", f"Rs. {data['overall_collected']}"],
+    ]
+
+    summary_table = Table(summary_data, colWidths=[280, 180])
+
+    summary_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+        ("PADDING", (0, 0), (-1, -1), 8),
+    ]))
+
+    elements.append(summary_table)
+    elements.append(Spacer(1, 25))
+
+    monthly_data = [
+        ["Month", "Total", "Advance", "Balance"]
+    ]
+
+    for item in data["monthly_revenue"]:
+        monthly_data.append([
+            item["month"],
+            f"Rs. {item['amount']}",
+            f"Rs. {item['advance_amount']}",
+            f"Rs. {item['balance_amount']}",
+        ])
+
+    monthly_table = Table(monthly_data)
+
+    monthly_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+        ("PADDING", (0, 0), (-1, -1), 8),
+    ]))
+
+    elements.append(Paragraph("Monthly Revenue", styles["Heading2"]))
+    elements.append(monthly_table)
+
+    pdf.build(elements)
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/pdf"
+    )
+
+    response["Content-Disposition"] = (
+        'attachment; filename="snaphire_revenue_report.pdf"'
+    )
+
+    buffer.close()
+    return response
+
+
+
+
+
+
 ZERO = Decimal("0.00")
 
 
@@ -1648,6 +1675,14 @@ ZERO = Decimal("0.00")
             description="End date in YYYY-MM-DD format",
             type=openapi.TYPE_STRING,
             format="date",
+            required=False,
+        ),
+        openapi.Parameter(
+            "export",
+            openapi.IN_QUERY,
+            description="Choose json or pdf",
+            type=openapi.TYPE_STRING,
+            enum=["json", "pdf"],
             required=False,
         ),
     ],
@@ -1817,6 +1852,11 @@ def admin_revenue_reports(request):
     }
 
     serializer = AdminRevenueReportsSerializer(data)
+    response_data = serializer.data
+
+# PDF download
+    if request.query_params.get("export") == "pdf":
+        return generate_revenue_pdf(response_data)
 
     return Response(
         {
@@ -2366,6 +2406,102 @@ def admin_update_terms(request, terms_id):
     }, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+from io import BytesIO
+from django.http import HttpResponse
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+)
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+
+
+def generate_booking_report_pdf(data):
+    buffer = BytesIO()
+
+    pdf = SimpleDocTemplate(buffer, pagesize=A4)
+
+    styles = getSampleStyleSheet()
+    elements = []
+
+    elements.append(
+        Paragraph("SnapsHire Monthly Booking Report", styles["Title"])
+    )
+    elements.append(Spacer(1, 20))
+
+    elements.append(Paragraph(
+        f"Start Date: {data.get('start_date') or 'All dates'}",
+        styles["Normal"]
+    ))
+
+    elements.append(Paragraph(
+        f"End Date: {data.get('end_date') or 'All dates'}",
+        styles["Normal"]
+    ))
+
+    elements.append(Spacer(1, 20))
+
+    summary_data = [
+        ["Booking Details", "Count"],
+        ["Total Bookings", str(data["total_bookings"])],
+    ]
+
+    summary_table = Table(summary_data, colWidths=[280, 180])
+
+    summary_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+        ("PADDING", (0, 0), (-1, -1), 8),
+    ]))
+
+    elements.append(summary_table)
+    elements.append(Spacer(1, 25))
+
+    monthly_data = [
+        ["Month", "Booking Count"]
+    ]
+
+    for item in data["monthly_report"]:
+        monthly_data.append([
+            item["month"],
+            str(item["booking_count"]),
+        ])
+
+    monthly_table = Table(monthly_data, colWidths=[280, 180])
+
+    monthly_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+        ("PADDING", (0, 0), (-1, -1), 8),
+    ]))
+
+    elements.append(
+        Paragraph("Monthly Booking Details", styles["Heading2"])
+    )
+    elements.append(monthly_table)
+
+    pdf.build(elements)
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/pdf"
+    )
+
+    response["Content-Disposition"] = (
+        'attachment; filename="snaphire_booking_report.pdf"'
+    )
+
+    buffer.close()
+    return response
+
+
+
+
+
+
 @swagger_auto_schema(
     method="get",
     manual_parameters=[
@@ -2384,6 +2520,15 @@ def admin_update_terms(request, terms_id):
             type=openapi.TYPE_STRING,
             format="date",
             required=True
+        ),
+
+        openapi.Parameter(
+            "export",
+            openapi.IN_QUERY,
+            description="Choose json or pdf",
+            type=openapi.TYPE_STRING,
+            enum=["json", "pdf"],
+            required=False,
         ),
     ],
     responses={200: AdminBookingReportSerializer}
@@ -2446,9 +2591,15 @@ def admin_booking_report(request):
     }
 
     serializer = AdminBookingReportSerializer(data)
+    response_data = serializer.data
+
+    if request.query_params.get("export") == "pdf":
+        return generate_booking_report_pdf(response_data)
 
     return Response({
         "success": True,
         "message": "Booking report retrieved successfully.",
         "data": serializer.data
     }, status=status.HTTP_200_OK)
+
+
