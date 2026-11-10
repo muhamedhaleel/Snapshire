@@ -67,6 +67,6 @@ urlpatterns = [
     path("dashboard/", views.user_dashboard, name="user-dashboard"),
     path("logout/", views.user_logout, name="user-logout"),
     path("terms-and-conditions/", views.get_user_terms, name="user-terms-and-conditions"),
-    
+    path("reschedule-requests-status/",views.user_reschedule_requests,name="user_reschedule_requests"),
      
 ]

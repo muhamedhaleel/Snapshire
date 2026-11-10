@@ -1015,40 +1015,34 @@ def create_photographer_charge(request):
             status=status.HTTP_404_NOT_FOUND
         )
 
+    if PhotographerCharge.objects.filter(
+        photographer=photographer
+    ).exists():
+        return Response(
+            {
+                "success": False,
+                "message": "Photographer hourly charge already exists. Please update it."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
     serializer = PhotographerChargeSerializer(
         data=request.data
     )
 
     if serializer.is_valid():
-
-        hours = serializer.validated_data["hours"]
-
-        # Check whether this duration already exists
-        if PhotographerCharge.objects.filter(
-            photographer=photographer,
-            hours=hours
-        ).exists():
-
-            return Response(
-                {
-                    "success": False,
-                    "message": f"Charge for {hours} hour(s) already exists."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        serializer.save(
-            photographer=photographer
-        )
+        serializer.save(photographer=photographer)
 
         return Response(
             {
                 "success": True,
-                "message": "Photographer charge added successfully.",
+                "message": "Photographer hourly charge added successfully.",
                 "data": serializer.data
             },
             status=status.HTTP_201_CREATED
         )
+
 
     return Response(
         {
@@ -1686,11 +1680,19 @@ def view_service_charges(request):
 
     charges = PhotographerCharge.objects.filter(
         photographer=photographer
-    ).order_by("hours")
+    ).first()
+    if not charges:
+        return Response(
+            {
+                "success": False,
+                "message": "Service charge not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
 
     serializer = PhotographerChargeSerializer(
         charges,
-        many=True
+        
     )
 
     return Response(
@@ -1762,11 +1764,11 @@ def update_service_charge(request, charge_id):
     return Response(
         {
             "success": True,
-            "message": "Service charge updated successfully.",
+            "message": "Hourly service charge updated successfully.",
             "data": {
                 "id": charge.id,
-                "hours": charge.hours,
-                "amount": str(charge.amount)
+                "amount": str(charge.amount),
+                "updated_at": charge.updated_at
             }
         },
         status=status.HTTP_200_OK

@@ -6,7 +6,7 @@ from photographer.serializers import PhotographerChargeSerializer
 from django.contrib.auth import authenticate
 from .models import Booking
 from rest_framework import serializers
-from .models import Notification
+from .models import Notification,RescheduleRequest
 from photographer.models import PhotographerCharge
 import re
 from django.contrib.auth.password_validation import validate_password
@@ -314,7 +314,7 @@ class UserPhotographerChargeSerializer(serializers.ModelSerializer):
     class Meta:
         model = PhotographerCharge
         fields=[
-            "hours",
+            
             "amount",
 
         ]
@@ -494,6 +494,7 @@ class PhotographerDetailSerializer(serializers.ModelSerializer):
 
 
 class BookingSerializer(serializers.ModelSerializer):
+    hours = serializers.IntegerField(min_value=1)
 
     class Meta:
         model = Booking
@@ -901,12 +902,14 @@ class WalletTransactionSerializer(serializers.ModelSerializer):
         read_only=True,
         allow_null=True
     )
-
+    transaction_id = serializers.SerializerMethodField()
+    
     class Meta:
         model = WalletTransaction
 
         fields = [
             "id",
+            "transaction_id",
             "booking_id",
             "amount",
             "transaction_type",
@@ -914,6 +917,8 @@ class WalletTransactionSerializer(serializers.ModelSerializer):
             "description",
             "created_at",
         ]
+    def get_transaction_id(self, obj):
+        return f"TXN-{obj.id:06d}"
 
 
 class CancelBookingRequestSerializer(serializers.Serializer):
@@ -988,4 +993,35 @@ class UserTermsSerializer(serializers.ModelSerializer):
             "version",
             "created_at",
             "updated_at",
+        ]
+
+
+
+class UserRescheduleRequestSerializer(serializers.ModelSerializer):
+
+    reschedule_id = serializers.IntegerField(source="id", read_only=True)
+    booking_id = serializers.IntegerField(source="booking.id", read_only=True)
+    photographer_id = serializers.IntegerField(
+        source="photographer.id", read_only=True
+    )
+    photographer_name = serializers.CharField(
+        source="photographer.user.username", read_only=True
+    )
+
+    class Meta:
+        model = RescheduleRequest
+        fields = [
+            "reschedule_id",
+            "booking_id",
+            "photographer_id",
+            "photographer_name",
+            "old_date",
+            "old_time",
+            "new_date",
+            "new_time",
+            "new_session",
+            "description",
+            "status",
+            "created_at",
+            "responded_at",
         ]

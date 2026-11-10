@@ -467,7 +467,6 @@ class PhotographerChargeSerializer(serializers.ModelSerializer):
         model = PhotographerCharge
         fields = [
             "id",
-            "hours",
             "amount",
             "created_at",
             "updated_at",
@@ -478,15 +477,7 @@ class PhotographerChargeSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
-    def validate_hours(self, value):
-
-        if value not in [1, 2, 3, 4]:
-            raise serializers.ValidationError(
-                "Hours must be 1, 2, 3, or 4."
-            )
-
-        return value
-
+    
     def validate_amount(self, value):
 
         if value <= 0:
@@ -603,12 +594,39 @@ class PhotographerDashboardSerializer(serializers.Serializer):
 
     performance = serializers.DictField()
 
+# class PhotographerChargeSerializer(serializers.ModelSerializer):
+
+#     class Meta:
+#         model = PhotographerCharge
+#         fields = ["id", "hours", "amount"]
+
+
+
+# class UpdatePhotographerChargeSerializer(serializers.ModelSerializer):
+
+#     class Meta:
+#         model = PhotographerCharge
+#         fields = ["amount"]
+
+#     def validate_amount(self, value):
+#         if value <= 0:
+#             raise serializers.ValidationError(
+#                 "Amount must be greater than 0."
+#             )
+#         return value
+
 class PhotographerChargeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PhotographerCharge
-        fields = ["id", "hours", "amount"]
+        fields = ["id", "amount"]
 
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError(
+                "Amount must be greater than 0."
+            )
+        return value
 
 
 class UpdatePhotographerChargeSerializer(serializers.ModelSerializer):

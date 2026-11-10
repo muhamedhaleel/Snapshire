@@ -13,7 +13,7 @@ from rest_framework.parsers import FormParser
 from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
 from photographer.models import PhotographerProfile
-from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerFilterSerializer,CreatePaymentSerializer,VerifyPaymentSerializer,CancelBookingSerializer,RescheduleRequestSerializer
+from .serializers import PhotographerViewSerializer,PhotographerDetailSerializer,PhotographerFilterSerializer,CreatePaymentSerializer,VerifyPaymentSerializer,CancelBookingSerializer,RescheduleRequestSerializer,UserRescheduleRequestSerializer
 from .models import Booking,UserWallet,WalletTransaction
 from .serializers import BookingSerializer,UserBookingStatusSerializer,VerifyOTPSerializer,UserFeedbackListSerializer
 from decimal import Decimal
@@ -31,7 +31,7 @@ from admin.models import Announcement,TermsAndConditions
 import random
 from django.core.mail import send_mail
 from django.utils import timezone
-
+from rest_framework.pagination import PageNumberPagination
 from .models import EmailOTP
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password
@@ -837,7 +837,7 @@ def create_booking(request):
 
     charge = PhotographerCharge.objects.filter(
         photographer=photographer
-    ).order_by("hours").first()
+    ).first()
 
     if not charge:
         return Response(
@@ -2949,23 +2949,22 @@ def user_wallet(request):
         status=status.HTTP_200_OK
     )
 
-from rest_framework.pagination import PageNumberPagination
-
-
-class WalletTransactionPagination(PageNumberPagination):
-
-    page_size = 10
-
-    page_size_query_param = "page_size"
-
-    max_page_size = 50
-
 @swagger_auto_schema(
     method="get",
+    manual_parameters=[
+        openapi.Parameter(
+            name="page",
+            in_=openapi.IN_QUERY,
+            description="Enter page number",
+            type=openapi.TYPE_INTEGER,
+            required=False,
+        ),
+    ],
     responses={
         200: WalletTransactionSerializer(many=True)
     }
 )
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def wallet_transactions(request):
@@ -2989,6 +2988,9 @@ def wallet_transactions(request):
                 "success": True,
                 "message": "Wallet has no transactions.",
                 "count": 0,
+                "total_pages": 0,
+                "current_page": 1,
+                "page_size": 10,
                 "next": None,
                 "previous": None,
                 "results": []
@@ -3036,13 +3038,27 @@ def wallet_transactions(request):
     # 6. Response
     # ---------------------------------------------
 
+    # return Response(
+    #     {
+    #         "success": True,
+    #         "message": (
+    #             "Wallet transactions retrieved successfully."
+    #         ),
+    #         "count": transactions.count(),
+    #         "next": paginator.get_next_link(),
+    #         "previous": paginator.get_previous_link(),
+    #         "results": serializer.data
+    #     },
+    #     status=status.HTTP_200_OK
+    # )
     return Response(
         {
             "success": True,
-            "message": (
-                "Wallet transactions retrieved successfully."
-            ),
-            "count": transactions.count(),
+            "message": "Wallet transactions retrieved successfully.",
+            "count": paginator.page.paginator.count,
+            "total_pages": paginator.page.paginator.num_pages,
+            "current_page": paginator.page.number,
+            "page_size": 10,
             "next": paginator.get_next_link(),
             "previous": paginator.get_previous_link(),
             "results": serializer.data
@@ -3697,3 +3713,59 @@ def get_user_terms(request):
         "message": "User terms retrieved successfully.",
         "data": serializer.data
     }, status=status.HTTP_200_OK)
+
+@swagger_auto_schema(
+    method="get",
+    manual_parameters=[
+        openapi.Parameter(
+            "page",
+            openapi.IN_QUERY,
+            description="Enter page number",
+            type=openapi.TYPE_INTEGER,
+            required=False,
+        ),
+    ],
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsNormalUser])
+def user_reschedule_requests(request):
+
+    # Get logged-in user's reschedule requests, newest first
+    requests = RescheduleRequest.objects.filter(
+        user=request.user
+    ).select_related(
+        "booking",
+        "photographer",
+        "photographer__user"
+    ).order_by("-created_at")
+
+    # Pagination
+    paginator = PageNumberPagination()
+    paginator.page_size = 10
+
+    paginated_requests = paginator.paginate_queryset(
+        requests,
+        request,
+    )
+
+    # Serialize reschedule requests
+    serializer = UserRescheduleRequestSerializer(
+        paginated_requests,
+        many=True,
+    )
+
+    return Response(
+        {
+            "success": True,
+            "message": "Rescheduling requests retrieved successfully.",
+            "count": paginator.page.paginator.count,
+            "total_pages": paginator.page.paginator.num_pages,
+            "current_page": paginator.page.number,
+            "page_size": 10,
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
+            "data": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+

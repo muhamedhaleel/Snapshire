@@ -152,7 +152,7 @@ class PhotographerCharge(models.Model):
         related_name="charges"
     )
 
-    hours = models.PositiveIntegerField()
+    
 
     amount = models.DecimalField(
         max_digits=10,
@@ -163,10 +163,16 @@ class PhotographerCharge(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ("photographer", "hours")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["photographer"],
+                name="unique_photographer_charge"
+            )
+        ]
+        
 
     def __str__(self):
-        return f"{self.photographer} - {self.hours} hours - {self.amount}"
+         return f"{self.photographer} - ₹{self.amount}/hour"
 
 
 
