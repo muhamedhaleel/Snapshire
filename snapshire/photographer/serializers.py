@@ -569,18 +569,6 @@ class UpdateWorkStatusSerializer(serializers.Serializer):
     )
 
 
-# class PhotographerDashboardSerializer(serializers.Serializer):
-
-#     total_bookings = serializers.IntegerField()
-
-#     completed_bookings = serializers.IntegerField()
-
-#     total_earnings = serializers.DecimalField(
-#         max_digits=12,
-#         decimal_places=2
-#     )
-
-#     plan_mode = serializers.CharField()
 
 class PhotographerDashboardSerializer(serializers.Serializer):
 
@@ -667,17 +655,21 @@ class PhotographerWalletTransactionSerializer(serializers.ModelSerializer):
         source="booking.id",
         read_only=True
     )
+    transaction_id = serializers.SerializerMethodField()
 
     class Meta:
         model = PhotographerWalletTransaction
         fields = [
             "id",
             "booking_id",
+            "transaction_id",
             "amount",
             "transaction_type",
             "description",
             "created_at",
         ]
+    def get_transaction_id(self, obj):
+            return f"TXN-{obj.id:06d}"
 
 
 

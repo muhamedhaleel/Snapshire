@@ -2766,7 +2766,7 @@ from .serializers import VerifyVerificationPaymentSerializer
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-@parser_classes([FormParser, JSONParser])
+@parser_classes([FormParser])
 def verify_verification_payment(request):
     serializer = VerifyVerificationPaymentSerializer(
         data=request.data
@@ -2911,7 +2911,7 @@ def verify_verification_payment(request):
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-@parser_classes([FormParser, JSONParser])
+@parser_classes([FormParser])
 def create_verification_order(request):
 
     # 1. Get photographer profile
