@@ -596,27 +596,7 @@ def create_weekly_availability(request):
     )
 
 
-# @swagger_auto_schema(
-#     method="get",
-#     responses={200: WeeklyAvailabilitySerializer(many=True)}
-# )
-# @api_view(["GET"])
-# @permission_classes([IsAuthenticated])
-# def my_weekly_availability(request):
 
-#     profile = request.user.photographer_profile
-
-#     availability = WeeklyAvailability.objects.filter(
-#         photographer=profile
-#     ).order_by("weekday")
-    
-
-#     serializer = WeeklyAvailabilitySerializer(
-#         availability,
-#         many=True
-#     )
-
-#     return Response(serializer.data)
 @swagger_auto_schema(
     method="get",
     responses={200: WeeklyAvailabilitySerializer(many=True)}
@@ -1310,6 +1290,7 @@ def update_work_status(request, booking_id):
             },
             status=status.HTTP_403_FORBIDDEN
         )
+    
 
     photographer = request.user.photographer_profile
 
@@ -1727,6 +1708,7 @@ def update_service_charge(request, charge_id):
             },
             status=status.HTTP_403_FORBIDDEN
         )
+    
 
     photographer = request.user.photographer_profile
 
@@ -1793,6 +1775,10 @@ def photographer_wallet(request):
             status=status.HTTP_403_FORBIDDEN
         )
 
+    response = check_photographer_verification(request)
+    if response:
+        return response
+
     photographer = request.user.photographer_profile
 
     wallet, created = PhotographerWallet.objects.get_or_create(
@@ -1841,6 +1827,10 @@ def credit_photographer_wallet(request):
             },
             status=status.HTTP_403_FORBIDDEN
         )
+
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     photographer = request.user.photographer_profile
 
@@ -3046,6 +3036,9 @@ def verification_transactions(request):
             },
             status=status.HTTP_403_FORBIDDEN
         )
+    response = check_photographer_verification(request)
+    if response:
+        return response
 
     photographer = request.user.photographer_profile
 

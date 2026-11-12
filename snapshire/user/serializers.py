@@ -373,6 +373,70 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
 
         return value
 
+
+
+     # First Name Validation
+    def validate_first_name(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError("First name cannot be empty.")
+
+        if not all(char.isalpha() or char in " -" for char in value):
+            raise serializers.ValidationError(
+                "First name must contain only letters and spaces."
+            )
+
+        return value
+
+    # Last Name Validation
+    def validate_last_name(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError("Last name cannot be empty.")
+
+        if not all(char.isalpha() or char in " -" for char in value):
+            raise serializers.ValidationError(
+                "Last name must contain only letters and spaces."
+            )
+
+        return value
+
+    # Phone Validation
+    def validate_phone(self, value):
+        value = value.strip()
+
+        if not re.fullmatch(r'[6-9]\d{9}', value):
+            raise serializers.ValidationError(
+                "Enter a valid 10-digit Indian mobile number."
+            )
+
+        if UserProfile.objects.exclude(
+            id=self.instance.id
+        ).filter(phone=value).exists():
+            raise serializers.ValidationError(
+                "This phone number is already registered."
+            )
+
+        return value
+
+    # Location Validation
+    def validate_location(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "Location cannot be empty."
+            )
+
+        return value
+
+    # Bio Validation
+    def validate_bio(self, value):
+        return value.strip()
+
+
     def update(self, instance, validated_data):
 
     # Update User model

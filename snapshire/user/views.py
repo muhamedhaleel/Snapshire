@@ -285,6 +285,15 @@ def profile(request):
 
 @swagger_auto_schema(
     method="get",
+    manual_parameters=[
+        openapi.Parameter(
+            "page",
+            openapi.IN_QUERY,
+            description="Enter page number",
+            type=openapi.TYPE_INTEGER,
+            required=False
+        )
+    ],
     responses={200: PhotographerViewSerializer(many=True)}
 )
 @api_view(["GET"])
@@ -307,7 +316,22 @@ def view_photographers(request):
         many=True
     )
 
-    return Response(serializer.data)
+
+    # Pagination
+    paginator = PageNumberPagination()
+    paginator.page_size = 10
+
+    paginated_photographers = paginator.paginate_queryset(
+        photographers, request
+    )
+
+    serializer = PhotographerViewSerializer(
+        paginated_photographers,
+        many=True
+    )
+
+
+    return paginator.get_paginated_response(serializer.data)
 
 
 
@@ -1178,6 +1202,15 @@ def user_notifications(request):
             enum=["asc", "desc"],
             required=False,
         ),
+
+        openapi.Parameter(
+            name="premium",
+            in_=openapi.IN_QUERY,
+            description="Filter by premium plan",
+            type=openapi.TYPE_STRING,
+            enum=["gold", "platinum"],
+            required=False,
+        ),
     ],
 )
 
@@ -1187,9 +1220,10 @@ def photographer_filter(request):
     location = request.GET.get("location")
     booking_date = request.GET.get("date")
     experience = request.GET.get("experience")
+    premium = request.GET.get("premium")
 
     # Require at least one filter
-    if not (location or booking_date or experience):
+    if not (location or booking_date or experience or premium):
         return Response(
             {
                 "error": "Please provide at least one filter."
@@ -1263,6 +1297,20 @@ def photographer_filter(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+     # Filter by premium plan
+    if premium:
+        premium = premium.lower()
+
+        if premium not in ["gold", "platinum"]:
+            return Response(
+                {"error": "Premium must be 'gold' or 'platinum'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        photographers = photographers.filter(
+            plan_mode=premium
+        )
+
     serializer = PhotographerFilterSerializer(
         photographers,
         many=True
@@ -1277,6 +1325,7 @@ def photographer_filter(request):
     request_body=VerifyOTPSerializer
 )
 @api_view(["POST"])
+@parser_classes([FormParser])
 def verify_otp(request):
 
     serializer = VerifyOTPSerializer(data=request.data)

@@ -235,7 +235,7 @@ class UpdatePhotographerProfileSerializer(serializers.ModelSerializer):
     last_name = serializers.CharField(required=True)
  
     phone = serializers.RegexField(
-        regex=r'^\d{10}$',
+        regex=r'^[6-9]\d{9}$',
         required=True,
         error_messages={
             "invalid": "Phone number must contain exactly 10 digits."
@@ -243,7 +243,7 @@ class UpdatePhotographerProfileSerializer(serializers.ModelSerializer):
     )
     bio = serializers.CharField(required=False)
     specialty = serializers.CharField(required=True)
-    experience=serializers.CharField(required=True)
+    experience=serializers.IntegerField(required=True)
     location = serializers.CharField(required=True)
     profile_image = serializers.ImageField(required=True)
     portfolio_link = serializers.URLField(required=False)
@@ -288,6 +288,102 @@ class UpdatePhotographerProfileSerializer(serializers.ModelSerializer):
             )
 
         return value
+
+    # First name validation
+    def validate_first_name(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "First name cannot be empty."
+            )
+
+        if not all(char.isalpha() or char in " -'" for char in value):
+            raise serializers.ValidationError(
+                "First name must contain only letters, spaces, hyphens or apostrophes."
+            )
+
+        return value
+
+    # Last name validation
+    def validate_last_name(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "Last name cannot be empty."
+            )
+
+        if not all(char.isalpha() or char in " -'" for char in value):
+            raise serializers.ValidationError(
+                "Last name must contain only letters, spaces, hyphens or apostrophes."
+            )
+
+        return value
+
+    # Phone validation
+    def validate_phone(self, value):
+        value = value.strip()
+
+        if not re.fullmatch(r'[6-9]\d{9}', value):
+            raise serializers.ValidationError(
+                "Enter a valid 10-digit mobile number."
+            )
+
+        if PhotographerProfile.objects.exclude(
+            id=self.instance.id
+        ).filter(phone=value).exists():
+            raise serializers.ValidationError(
+                "This phone number is already registered."
+            )
+
+        return value
+
+    # Specialty validation
+    def validate_specialty(self, value):
+        value = value.strip()
+
+        if len(value) < 3:
+            raise serializers.ValidationError(
+                "Specialty must contain at least 3 characters."
+            )
+
+        if not any(char.isalpha() for char in value):
+            raise serializers.ValidationError(
+                "Specialty must contain letters."
+            )
+
+        return value
+
+    # Experience validation
+    def validate_experience(self, value):
+        if value < 0 or value > 60:
+            raise serializers.ValidationError(
+                "Experience must be between 0 and 60 years."
+            )
+
+        return value
+
+    # Location validation
+    def validate_location(self, value):
+        value = value.strip()
+
+        if len(value) < 2:
+            raise serializers.ValidationError(
+                "Location must contain at least 2 characters."
+            )
+
+        if not any(char.isalpha() for char in value):
+            raise serializers.ValidationError(
+                "Enter a valid location."
+            )
+
+        return value
+
+    # Bio validation
+    def validate_bio(self, value):
+        return value.strip()
+
 
     def update(self, instance, validated_data):
 
