@@ -1110,3 +1110,8 @@ class AdminBookingReportSerializer(serializers.Serializer):
     end_date = serializers.DateField()
     total_bookings = serializers.IntegerField()
     monthly_report = MonthlyBookingSerializer(many=True)
+
+
+
+class AdminlogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField(required=True)

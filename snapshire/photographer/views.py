@@ -17,7 +17,7 @@ from user.serializers import NotificationSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from .models import WeeklyAvailability, AvailabilityException,PhotographerProfile,PhotographerCharge,PhotographerWalletTransaction,PhotographerWallet,PhotographerProfile, PhotographerPasswordResetOTP
-from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer,RejectBookingSerializer,PhotographerMyBookingSerializer,UpdatePhotographerChargeSerializer, PhotographerWalletSerializer,PhotographerGoogleLoginSerializer, PhotographerForgotPasswordSerializer,PhotographerResetPasswordSerializer
+from .serializers import WeeklyAvailabilitySerializer,AvailabilityExceptionSerializer,RejectBookingSerializer,PhotographerMyBookingSerializer,UpdatePhotographerChargeSerializer, PhotographerWalletSerializer,PhotographerGoogleLoginSerializer, PhotographerForgotPasswordSerializer,PhotographerResetPasswordSerializer,LogoutSerializer
 from datetime import date, timedelta
 import random
 from .serializers import  PhotographerVerifyOTPSerializer,PhotographerChargeSerializer,PhotographerBookingRequestSerializer,PhotographerRescheduleRequestSerializer,CreateVerificationOrderSerializer
@@ -52,7 +52,8 @@ from .models import (
     
 )
 from rest_framework.parsers import FormParser
-
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from admin.models import VerificationPlan
 from .serializers import VerificationSerializer
 from decimal import Decimal
@@ -3339,3 +3340,68 @@ def get_photographer_terms(request):
         "message": "Photographer terms retrieved successfully.",
         "data": serializer.data
     }, status=status.HTTP_200_OK)
+
+
+
+@swagger_auto_schema(
+    method="post",
+    request_body=LogoutSerializer
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@parser_classes([FormParser])
+def photographer_logout(request):
+
+    if not hasattr(request.user, "photographer_profile"):
+        return Response(
+            {
+                "success": False,
+                "message": "You are not a photographer."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    serializer = LogoutSerializer(data=request.data)
+
+    if serializer.is_valid():
+        try:
+            refresh_token = RefreshToken(
+                serializer.validated_data["refresh"]
+            )
+
+            # Verify that the refresh token belongs to this user
+            if str(refresh_token["user_id"]) != str(request.user.id):
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Invalid refresh token."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            refresh_token.blacklist()
+
+            return Response(
+                {
+                    "success": True,
+                    "message": "Photographer logged out successfully."
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except (TokenError, InvalidToken):
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid or expired refresh token."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    return Response(
+        {
+            "success": False,
+            "errors": serializer.errors
+        },
+        status=status.HTTP_400_BAD_REQUEST
+    )

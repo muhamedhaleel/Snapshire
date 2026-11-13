@@ -25,7 +25,8 @@ from .models import ActivityLog
 from .serializers import ActivityLogSerializer
 from .models import Announcement,TermsAndConditions
 from .serializers import AnnouncementSerializer
-
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from datetime import date
 from django.db.models import Count
 from django.db.models.functions import TruncMonth
@@ -42,7 +43,7 @@ from .serializers import (
     AdminWalletTransactionSerializer,
     AdminVerificationWalletTransactionSerializer,
     AdminRescheduleRequestSerializer,
-    TermsAndConditionsSerializer
+    TermsAndConditionsSerializer,AdminlogoutSerializer
 )
 from .serializers import VerificationPlanSerializer,AdminPhotographerReportsSerializer,PhotographerPerformanceSerializer,UserReportItemSerializer
 from photographer.models import VerificationPayment
@@ -2603,3 +2604,34 @@ def admin_booking_report(request):
     }, status=status.HTTP_200_OK)
 
 
+@swagger_auto_schema(
+    method="post",
+    request_body=AdminlogoutSerializer
+)
+@api_view(["POST"])
+@parser_classes([FormParser])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def admin_logout(request):
+
+    serializer = AdminlogoutSerializer(data=request.data)
+
+    if serializer.is_valid():
+        try:
+            refresh_token = RefreshToken(serializer.validated_data["refresh"])
+            refresh_token.blacklist()
+
+            return Response({
+                "success": True,
+                "message": "Admin logged out successfully."
+            }, status=status.HTTP_200_OK)
+
+        except (TokenError, InvalidToken):
+            return Response({
+                "success": False,
+                "message": "Invalid or expired refresh token."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({
+        "success": False,
+        "errors": serializer.errors
+    }, status=status.HTTP_400_BAD_REQUEST)

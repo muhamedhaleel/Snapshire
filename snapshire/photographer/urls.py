@@ -150,5 +150,5 @@ urlpatterns = [
         views.get_photographer_terms,
         name="photographer-terms-and-conditions"
     ),
-
+    path("logout/", views.photographer_logout, name="photographer_logout"),
 ]

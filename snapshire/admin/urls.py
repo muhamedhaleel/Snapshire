@@ -196,6 +196,9 @@ urlpatterns = [
     ),
 
 
+    path("logout/", views.admin_logout, name="admin_logout"),
+
+
 
     
 

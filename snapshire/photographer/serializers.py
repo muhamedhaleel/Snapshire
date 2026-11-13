@@ -924,3 +924,8 @@ class PhotographerTermsSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField(required=True)
